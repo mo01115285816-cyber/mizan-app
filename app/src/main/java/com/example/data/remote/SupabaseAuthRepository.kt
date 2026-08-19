@@ -348,7 +348,7 @@ class SupabaseAuthRepository(
         try {
             val rpcEndpoint = "$supabaseUrl/rest/v1/rpc/accept_invite"
             val rpcPayload = JSONObject().apply {
-                put("invite_token", inviteToken)
+                put("p_invite_token", inviteToken)
             }
 
             val rpcRequest = Request.Builder()

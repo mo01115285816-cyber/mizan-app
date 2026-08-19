@@ -36,7 +36,7 @@ import com.example.feature.blocked.BlockedUiState
 import com.example.feature.home.HomeScreen
 import com.example.feature.setup.SetupScreen
 import com.example.ui.viewmodel.MizanViewModel
-import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
+import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import kotlinx.coroutines.launch
 
@@ -136,14 +136,17 @@ class MainActivity : ComponentActivity() {
                         // Generate cryptographic nonce pair (raw for Supabase, SHA256 hashed for Google)
                         val (rawNonce, hashedNonce) = SupabaseAuthRepository.generateCryptoNonce()
 
-                        // This is an explicit "Sign in with Google" button flow.
-                        // GetSignInWithGoogleOption is the provider option intended for this UX.
-                        val signInWithGoogleOption = GetSignInWithGoogleOption.Builder(serverClientId)
+                        // Use the bottom-sheet Google ID flow with all device accounts.
+                        // This handles both previously authorized and first-time accounts,
+                        // including devices where the explicit button provider aborts after selection.
+                        val googleIdOption = GetGoogleIdOption.Builder()
+                            .setFilterByAuthorizedAccounts(false)
+                            .setServerClientId(serverClientId)
                             .setNonce(hashedNonce)
                             .build()
 
                         val request = GetCredentialRequest.Builder()
-                            .addCredentialOption(signInWithGoogleOption)
+                            .addCredentialOption(googleIdOption)
                             .build()
 
                         try {
