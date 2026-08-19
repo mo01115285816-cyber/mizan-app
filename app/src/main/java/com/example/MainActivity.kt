@@ -25,6 +25,7 @@ import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialException
+import androidx.credentials.exceptions.NoCredentialException
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.core.common.PermissionHelper
 import com.example.core.designsystem.MizanTheme
@@ -35,7 +36,7 @@ import com.example.feature.blocked.BlockedUiState
 import com.example.feature.home.HomeScreen
 import com.example.feature.setup.SetupScreen
 import com.example.ui.viewmodel.MizanViewModel
-import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import kotlinx.coroutines.launch
 
@@ -135,15 +136,14 @@ class MainActivity : ComponentActivity() {
                         // Generate cryptographic nonce pair (raw for Supabase, SHA256 hashed for Google)
                         val (rawNonce, hashedNonce) = SupabaseAuthRepository.generateCryptoNonce()
 
-                        val googleIdOption = GetGoogleIdOption.Builder()
-                            .setFilterByAuthorizedAccounts(false)
-                            .setServerClientId(serverClientId)
-                            .setAutoSelectEnabled(false)
+                        // This is an explicit "Sign in with Google" button flow.
+                        // GetSignInWithGoogleOption is the provider option intended for this UX.
+                        val signInWithGoogleOption = GetSignInWithGoogleOption.Builder(serverClientId)
                             .setNonce(hashedNonce)
                             .build()
 
                         val request = GetCredentialRequest.Builder()
-                            .addCredentialOption(googleIdOption)
+                            .addCredentialOption(signInWithGoogleOption)
                             .build()
 
                         try {
@@ -166,6 +166,9 @@ class MainActivity : ComponentActivity() {
                             } else {
                                 viewModel.onSignInError("نوع بيانات الاعتماد المستلمة غير مدعوم")
                             }
+                        } catch (e: NoCredentialException) {
+                            Log.w("MainActivity", "No eligible Google credential was returned", e)
+                            viewModel.onSignInError("لم يتم العثور على حساب Google مؤهل لتسجيل الدخول بهذا التطبيق، يرجى التأكد من إعداد Google Play Services وOAuth ثم المحاولة مجدداً")
                         } catch (e: androidx.credentials.exceptions.GetCredentialCancellationException) {
                             Log.i("MainActivity", "Google sign-in was cancelled by the user")
                             viewModel.onSignInCancelled()
