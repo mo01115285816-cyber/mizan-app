@@ -1,0 +1,8 @@
+{
+  "name": "MIZAN",
+  "description": "Android application for managing household Wi-Fi quota and fair internet balance with Apple Fluid Design",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
