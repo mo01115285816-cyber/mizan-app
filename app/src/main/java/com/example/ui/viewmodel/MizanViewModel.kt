@@ -119,13 +119,13 @@ class MizanViewModel(
     ) {
         viewModelScope.launch {
             _appState.value = AppState.SigningIn
-            val success = repository.authRepository.signInWithGoogleIdToken(
+            val authResult = repository.authRepository.signInWithGoogleIdToken(
                 idToken = idToken,
                 rawNonce = rawNonce,
                 displayName = displayName,
                 photoUrl = photoUrl
             )
-            if (success) {
+            if (authResult.success) {
                 val resolvedName = displayName ?: repository.authRepository.getUserDisplayName() ?: "عضو العائلة"
                 val resolvedEmail = repository.authRepository.getUserEmail() ?: ""
                 val resolvedPhoto = photoUrl ?: repository.authRepository.getUserPhotoUrl() ?: ""
@@ -143,7 +143,9 @@ class MizanViewModel(
                     _appState.value = AppState.WaitingForInvite
                 }
             } else {
-                _appState.value = AppState.AuthError("فشل تسجيل الدخول باستخدام Google أو التحقق من الجلسة")
+                _appState.value = AppState.AuthError(
+                    authResult.errorMessage ?: "فشل تسجيل الدخول باستخدام Google أو التحقق من الجلسة"
+                )
             }
         }
     }

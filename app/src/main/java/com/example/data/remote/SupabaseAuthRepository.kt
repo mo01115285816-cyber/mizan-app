@@ -18,6 +18,11 @@ import java.security.SecureRandom
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
+data class GoogleAuthResult(
+    val success: Boolean,
+    val errorMessage: String? = null
+)
+
 class SupabaseAuthRepository(
     private val context: Context,
     private val okHttpClient: OkHttpClient = OkHttpClient.Builder()
@@ -227,7 +232,7 @@ class SupabaseAuthRepository(
         rawNonce: String? = null,
         displayName: String? = null,
         photoUrl: String? = null
-    ): Boolean = withContext(Dispatchers.IO) {
+    ): GoogleAuthResult = withContext(Dispatchers.IO) {
         try {
             val endpoint = "$supabaseUrl/auth/v1/token?grant_type=id_token"
             val payload = JSONObject().apply {
@@ -270,14 +275,39 @@ class SupabaseAuthRepository(
                     expiresInSeconds = expiresIn
                 )
                 Log.d(TAG, "Successfully signed in Supabase user: $userId")
-                return@withContext true
+                return@withContext GoogleAuthResult(success = true)
             } else {
+                val safeMessage = mapGoogleAuthError(response.code, responseBody)
                 Log.e(TAG, "Google auth error: ${response.code} $responseBody")
-                return@withContext false
+                return@withContext GoogleAuthResult(success = false, errorMessage = safeMessage)
             }
+        } catch (e: java.net.UnknownHostException) {
+            Log.e(TAG, "Supabase host could not be resolved", e)
+            return@withContext GoogleAuthResult(false, "تعذر الوصول إلى خادم Mizan، تحقق من اتصال الإنترنت")
+        } catch (e: java.io.IOException) {
+            Log.e(TAG, "Network error during Google authentication", e)
+            return@withContext GoogleAuthResult(false, "تعذر الاتصال بخادم Mizan، حاول مرة أخرى")
         } catch (e: Exception) {
             Log.e(TAG, "Error in signInWithGoogleIdToken", e)
-            return@withContext false
+            return@withContext GoogleAuthResult(false, "حدث خطأ أثناء إنشاء جلسة الدخول")
+        }
+    }
+
+    private fun mapGoogleAuthError(statusCode: Int, responseBody: String): String {
+        val normalized = responseBody.lowercase()
+        return when {
+            "provider" in normalized && "not enabled" in normalized ->
+                "تسجيل الدخول بحساب Google غير مفعّل في إعدادات خادم Mizan"
+            "audience" in normalized || "client_id" in normalized ->
+                "إعداد Google OAuth غير مطابق لتطبيق Mizan (Client ID أو بصمة التطبيق)"
+            "nonce" in normalized ->
+                "فشل التحقق الأمني لجلسة Google (Nonce غير مطابق)"
+            "invalid" in normalized && "token" in normalized ->
+                "رفض خادم Mizan رمز Google؛ تحقق من إعداد OAuth"
+            statusCode == 401 || statusCode == 403 ->
+                "رفض خادم Mizan تسجيل الدخول؛ تحقق من إعدادات Google OAuth"
+            else ->
+                "فشل خادم Mizan في تسجيل الدخول (HTTP $statusCode)"
         }
     }
 
