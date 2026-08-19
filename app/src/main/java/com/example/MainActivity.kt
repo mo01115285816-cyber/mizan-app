@@ -170,8 +170,14 @@ class MainActivity : ComponentActivity() {
                             Log.w("MainActivity", "No eligible Google credential was returned", e)
                             viewModel.onSignInError("لم يتم العثور على حساب Google مؤهل لتسجيل الدخول بهذا التطبيق، يرجى التأكد من إعداد Google Play Services وOAuth ثم المحاولة مجدداً")
                         } catch (e: androidx.credentials.exceptions.GetCredentialCancellationException) {
-                            Log.i("MainActivity", "Google sign-in was cancelled by the user")
-                            viewModel.onSignInCancelled()
+                            // Do not silently turn every cancellation exception into SignedOut.
+                            // On some Google Play Services versions this exception is also used
+                            // when the provider aborts the flow after account selection.
+                            Log.e("MainActivity", "Google sign-in flow was cancelled/aborted: ${e.message}", e)
+                            viewModel.onSignInError(
+                                "توقفت Google عن إكمال تسجيل الدخول بعد اختيار الحساب. " +
+                                    "أعد المحاولة، وإذا تكرر الخطأ فهذه الرسالة التقنية: ${e.message ?: "لا توجد تفاصيل"}"
+                            )
                         } catch (e: GetCredentialException) {
                             Log.e("MainActivity", "Google sign in credential error: ${e.message}", e)
                             val errorMsg = when {
