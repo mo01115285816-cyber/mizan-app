@@ -141,6 +141,7 @@ class MizanRepositoryImpl(
             val totalGb = profile?.quotaLimitGb ?: 133.3f
             val homeSsid = profile?.homeSsid ?: ""
             val homeBssid = preferencesDataSource.homeBssidFlow.first()
+            val baseline = preferencesDataSource.getWifiBaseline()
 
             val isHome = networkDetails.isWifi && (
                 (homeBssid.isNotBlank() && networkDetails.bssid.equals(homeBssid, ignoreCase = true)) ||
@@ -179,9 +180,18 @@ class MizanRepositoryImpl(
                 0
             }
 
-            val daysInMonth = calendar.get(Calendar.DAY_OF_MONTH).coerceAtLeast(1)
-            val dailyAvg = if (daysInMonth > 0 && usedGb > 0f) {
-                (Math.round((usedGb / daysInMonth.toFloat()) * 10000.0) / 10000.0).toFloat()
+            val now = System.currentTimeMillis()
+            val activeStart = if (baseline.initialized && baseline.monthKey == monthKey(now)) {
+                baseline.timestamp.coerceAtMost(now)
+            } else {
+                now
+            }
+            val activeDays = (((now - activeStart).coerceAtLeast(0L)) / 86_400_000L)
+                .toInt()
+                .plus(1)
+                .coerceAtLeast(1)
+            val dailyAvg = if (usedGb > 0f) {
+                (Math.round((usedGb / activeDays.toFloat()) * 10000.0) / 10000.0).toFloat()
             } else {
                 0f
             }
