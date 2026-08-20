@@ -31,6 +31,15 @@ import java.util.Locale
 import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 
+data class DeviceHealthPayload(
+    val serviceHeartbeatAt: Long,
+    val lastPolicySyncAt: Long,
+    val lastTelemetryUploadAt: Long,
+    val vpnState: String,
+    val networkState: String,
+    val permissionHealth: String
+)
+
 class SupabaseDeviceDataSource(
     private val authRepository: SupabaseAuthRepository? = null,
     private val client: OkHttpClient = OkHttpClient.Builder()
@@ -189,6 +198,34 @@ class SupabaseDeviceDataSource(
             response.use { it.isSuccessful }
         } catch (e: Exception) {
             Log.w(tag, "Failed to sync network telemetry: ${e.message}")
+            false
+        }
+    }
+
+    /**
+     * Sends operational health evidence without creating a usage snapshot.
+     */
+    suspend fun syncDeviceHealth(deviceKey: String, health: DeviceHealthPayload): Boolean = withContext(Dispatchers.IO) {
+        if (!isConfigured || deviceKey.isBlank()) return@withContext false
+        try {
+            val payload = JSONObject().apply {
+                put("service_heartbeat_at", if (health.serviceHeartbeatAt > 0L) iso8601(health.serviceHeartbeatAt) else JSONObject.NULL)
+                put("last_policy_sync_at", if (health.lastPolicySyncAt > 0L) iso8601(health.lastPolicySyncAt) else JSONObject.NULL)
+                put("last_telemetry_upload_at", if (health.lastTelemetryUploadAt > 0L) iso8601(health.lastTelemetryUploadAt) else JSONObject.NULL)
+                put("vpn_state", health.vpnState.take(32))
+                put("network_state", health.networkState.take(64))
+                put("permission_health", health.permissionHealth.take(256))
+                put("last_seen_at", getIso8601Timestamp())
+            }
+            client.newCall(Request.Builder()
+                .url("$supabaseUrl/rest/v1/devices?device_key=eq.$deviceKey")
+                .header("apikey", anonKey)
+                .header("Authorization", "Bearer ${getAuthBearerToken()}")
+                .header("Content-Type", "application/json")
+                .patch(payload.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
+                .build()).execute().use { it.isSuccessful }
+        } catch (e: Exception) {
+            Log.w(tag, "Failed to sync device health: ${e.message}")
             false
         }
     }

@@ -153,6 +153,18 @@ object PermissionHelper {
         }
     }
 
+    fun permissionHealthSummary(context: Context): String {
+        val state = checkAllPermissions(context)
+        val location = if (isLocationServicesEnabled(context)) "LOCATION_ON" else "LOCATION_OFF"
+        val wifi = if (hasNearbyWifiPermission(context)) "NEARBY_WIFI_GRANTED" else "NEARBY_WIFI_MISSING"
+        val fine = if (hasLocationPermission(context)) "LOCATION_GRANTED" else "LOCATION_MISSING"
+        val usage = if (state.hasUsageAccess) "USAGE_GRANTED" else "USAGE_MISSING"
+        val vpn = if (state.isVpnPrepared) "VPN_PREPARED" else "VPN_NOT_PREPARED"
+        val battery = if (state.isIgnoringBatteryOptimizations) "BATTERY_EXEMPT" else "BATTERY_OPTIMIZED"
+        val notification = if (state.hasNotification) "NOTIFICATION_GRANTED" else "NOTIFICATION_MISSING"
+        return listOf(location, wifi, fine, usage, vpn, battery, notification).joinToString(";")
+    }
+
     fun hasNotificationPermission(context: Context): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             ContextCompat.checkSelfPermission(

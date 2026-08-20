@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.NetworkCapabilities
 import android.provider.Settings
 import com.example.core.common.NetworkInfoProvider
+import com.example.core.common.PermissionHelper
 import com.example.core.common.Resource
 import com.example.core.model.AppUsageItem
 import com.example.core.model.DeviceProfile
@@ -12,6 +13,7 @@ import com.example.core.model.QuotaPolicy
 import com.example.core.model.UsageSnapshot
 import com.example.data.datasource.AndroidNetworkStatsDataSource
 import com.example.data.local.DevicePreferencesDataSource
+import com.example.data.remote.DeviceHealthPayload
 import com.example.data.remote.SupabaseAuthRepository
 import com.example.data.remote.SupabaseDeviceDataSource
 import com.example.feature.home.DayUsage
@@ -58,6 +60,7 @@ class MizanRepositoryImpl(
                 preferencesDataSource.updateQuotaLimit(updatedPolicy.monthlyLimitGb)
                 preferencesDataSource.setBlockedStatus(updatedPolicy.isBlocked)
                 preferencesDataSource.setRemoteEnforceVpnBlock(updatedPolicy.enforceVpnBlock)
+                preferencesDataSource.recordPolicySync()
                 if (!updatedPolicy.isBlocked) {
                     QuotaVpnService.stop(context)
                     QuotaOverlayService.hide(context)
@@ -88,7 +91,9 @@ class MizanRepositoryImpl(
         // It is metadata only and is sent immediately after device registration.
         val firstNetworkDetails = NetworkInfoProvider.getConnectedNetworkDetails(context)
         if (firstNetworkDetails.isWifi) {
-            supabaseDataSource.syncNetworkTelemetry(profile.deviceKey, firstNetworkDetails)
+            if (supabaseDataSource.syncNetworkTelemetry(profile.deviceKey, firstNetworkDetails)) {
+                preferencesDataSource.recordTelemetryUpload()
+            }
         }
 
         val targetSsid = supabaseDataSource.fetchTargetSsid(profile.householdId)
@@ -117,6 +122,7 @@ class MizanRepositoryImpl(
                 preferencesDataSource.updateQuotaLimit(remotePolicy.monthlyLimitGb)
                 preferencesDataSource.setBlockedStatus(remotePolicy.isBlocked)
                 preferencesDataSource.setRemoteEnforceVpnBlock(remotePolicy.enforceVpnBlock)
+                preferencesDataSource.recordPolicySync()
             }
         }
 
@@ -136,12 +142,31 @@ class MizanRepositoryImpl(
             preferencesDataSource.updateQuotaLimit(quotaPolicy.monthlyLimitGb)
             preferencesDataSource.setBlockedStatus(quotaPolicy.isBlocked)
             preferencesDataSource.setRemoteEnforceVpnBlock(quotaPolicy.enforceVpnBlock)
+            preferencesDataSource.recordPolicySync()
         }
         val networkDetails = NetworkInfoProvider.getConnectedNetworkDetails(context)
-        if (networkDetails.isWifi) {
-            supabaseDataSource.syncNetworkTelemetry(profile.deviceKey, networkDetails)
+        preferencesDataSource.setNetworkState(NetworkInfoProvider.classifyNetworkState(networkDetails))
+        if (networkDetails.isWifi && supabaseDataSource.syncNetworkTelemetry(profile.deviceKey, networkDetails)) {
+            preferencesDataSource.recordTelemetryUpload()
         }
-        return supabaseDataSource.upsertDevice(profile, includePolicyFields = false)
+        val success = supabaseDataSource.upsertDevice(profile, includePolicyFields = false)
+        syncHealth(profile.deviceKey)
+        return success
+    }
+
+    suspend fun syncHealth(deviceKey: String? = null): Boolean {
+        val profile = getDeviceProfileSync()
+        val key = deviceKey ?: profile?.deviceKey ?: return false
+        val health = DeviceHealthPayload(
+            serviceHeartbeatAt = preferencesDataSource.serviceHeartbeatAtFlow.first(),
+            lastPolicySyncAt = preferencesDataSource.lastPolicySyncAtFlow.first(),
+            lastTelemetryUploadAt = preferencesDataSource.lastTelemetryUploadAtFlow.first(),
+            vpnState = preferencesDataSource.vpnStateFlow.first(),
+            networkState = preferencesDataSource.networkStateFlow.first(),
+            permissionHealth = PermissionHelper.permissionHealthSummary(context)
+        )
+        preferencesDataSource.setPermissionHealth(health.permissionHealth)
+        return supabaseDataSource.syncDeviceHealth(key, health)
     }
 
     override fun getQuotaPolicy(): Flow<QuotaPolicy?> = flow {
@@ -344,7 +369,9 @@ class MizanRepositoryImpl(
                 appSnapshots = emptyList()
             )
             if (profile != null && profile.deviceKey.isNotBlank()) {
-                supabaseDataSource.syncUsageSnapshot(profile.deviceKey, baselineSnapshot)
+                if (supabaseDataSource.syncUsageSnapshot(profile.deviceKey, baselineSnapshot)) {
+                    preferencesDataSource.recordTelemetryUpload()
+                }
             }
             return baselineSnapshot
         }
@@ -389,7 +416,9 @@ class MizanRepositoryImpl(
 
         // Sync with Supabase if device is registered
         if (profile != null && profile.deviceKey.isNotBlank()) {
-            supabaseDataSource.syncUsageSnapshot(profile.deviceKey, snapshot)
+            if (supabaseDataSource.syncUsageSnapshot(profile.deviceKey, snapshot)) {
+                preferencesDataSource.recordTelemetryUpload()
+            }
         }
 
         return snapshot

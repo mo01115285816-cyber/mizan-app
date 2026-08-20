@@ -12,6 +12,7 @@ import android.os.ParcelFileDescriptor
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.example.MainActivity
+import com.example.data.local.DevicePreferencesDataSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -30,6 +31,7 @@ class QuotaVpnService : VpnService() {
     private var vpnInterface: ParcelFileDescriptor? = null
     private val vpnScope = CoroutineScope(Dispatchers.IO + Job())
     private var packetDrainJob: Job? = null
+    private lateinit var preferences: DevicePreferencesDataSource
 
     companion object {
         const val CHANNEL_ID = "mizan_vpn_channel"
@@ -64,6 +66,17 @@ class QuotaVpnService : VpnService() {
         }
     }
 
+    override fun onCreate() {
+        super.onCreate()
+        preferences = DevicePreferencesDataSource(applicationContext)
+    }
+
+    private fun recordVpnState(state: String) {
+        if (::preferences.isInitialized) {
+            vpnScope.launch { preferences.setVpnState(state) }
+        }
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP_VPN -> {
@@ -79,6 +92,7 @@ class QuotaVpnService : VpnService() {
     }
 
     private fun startVpn() {
+        recordVpnState("STARTING")
         createNotificationChannel()
         val notification = buildVpnNotification("تم إيقاف الإنترنت مؤقتاً لاكتمال الحصة الشهرية")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -115,8 +129,10 @@ class QuotaVpnService : VpnService() {
             vpnInterface = builder.establish()
                 ?: throw IllegalStateException("Android refused to establish the VPN interface")
             startPacketDrainLoop()
+            recordVpnState("ESTABLISHED")
             Log.i(tag, "Quota VPN restriction established successfully.")
         } catch (e: Exception) {
+            recordVpnState("ESTABLISH_FAILED")
             Log.e(tag, "Failed to establish VPN interface: ${e.message}")
         }
     }
@@ -153,6 +169,7 @@ class QuotaVpnService : VpnService() {
 
     private fun stopVpn() {
         stopVpnInternal()
+        recordVpnState("STOPPED")
         stopForeground(STOP_FOREGROUND_REMOVE)
         Log.i(tag, "Quota VPN stopped and normal connectivity restored.")
     }
@@ -189,6 +206,7 @@ class QuotaVpnService : VpnService() {
 
     override fun onDestroy() {
         stopVpn()
+        recordVpnState("DESTROYED")
         super.onDestroy()
     }
 }

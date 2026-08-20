@@ -7,6 +7,10 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
@@ -24,6 +28,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 class UsageTrackingService : Service() {
 
@@ -31,6 +37,13 @@ class UsageTrackingService : Service() {
     private val serviceJob = Job()
     private val serviceScope = CoroutineScope(Dispatchers.IO + serviceJob)
     private var trackingLoopJob: Job? = null
+    private var networkCallbackRegistered = false
+    private val syncMutex = Mutex()
+    private val networkCallback = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: Network) = scheduleImmediateRefresh()
+        override fun onLost(network: Network) = scheduleImmediateRefresh()
+        override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) = scheduleImmediateRefresh()
+    }
 
     private lateinit var repository: MizanRepositoryImpl
     private lateinit var preferences: DevicePreferencesDataSource
@@ -90,6 +103,36 @@ class UsageTrackingService : Service() {
         networkStatsDataSource = AndroidNetworkStatsDataSource(applicationContext)
         repository = MizanRepositoryImpl(applicationContext, preferences, networkStatsDataSource)
         createNotificationChannel()
+        registerNetworkCallback()
+    }
+
+    private fun registerNetworkCallback() {
+        val connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return
+        if (networkCallbackRegistered) return
+        try {
+            val request = NetworkRequest.Builder()
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .build()
+            connectivityManager.registerNetworkCallback(request, networkCallback)
+            networkCallbackRegistered = true
+        } catch (e: Exception) {
+            Log.w(tag, "Could not register network callback: ${e.message}")
+        }
+    }
+
+    private fun unregisterNetworkCallback() {
+        val connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return
+        if (!networkCallbackRegistered) return
+        runCatching { connectivityManager.unregisterNetworkCallback(networkCallback) }
+        networkCallbackRegistered = false
+    }
+
+    private fun scheduleImmediateRefresh() {
+        if (!serviceJob.isActive) return
+        serviceScope.launch {
+            runCatching { syncMutex.withLock { checkAndSyncUsage() } }
+                .onFailure { Log.w(tag, "Immediate network refresh failed: ${it.message}") }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -103,7 +146,7 @@ class UsageTrackingService : Service() {
             }
             ACTION_REFRESH_NOW -> {
                 startForegroundNotification()
-                serviceScope.launch { checkAndSyncUsage() }
+                serviceScope.launch { syncMutex.withLock { checkAndSyncUsage() } }
             }
             else -> {
                 startForegroundNotification()
@@ -116,6 +159,13 @@ class UsageTrackingService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onDestroy() {
+        unregisterNetworkCallback()
+        trackingLoopJob?.cancel()
+        serviceJob.cancel()
+        super.onDestroy()
+    }
 
     private fun startForegroundNotification() {
         val notification = buildTrackingNotification(
@@ -137,7 +187,7 @@ class UsageTrackingService : Service() {
         trackingLoopJob = serviceScope.launch {
             while (isActive) {
                 try {
-                    checkAndSyncUsage()
+                    syncMutex.withLock { checkAndSyncUsage() }
                 } catch (e: Exception) {
                     Log.w(tag, "Error in tracking loop: ${e.message}")
                 }
@@ -147,8 +197,10 @@ class UsageTrackingService : Service() {
     }
 
     private suspend fun checkAndSyncUsage() {
+        preferences.recordServiceHeartbeat()
         val snapshot = repository.recordUsageSnapshot()
         val networkDetails = NetworkInfoProvider.getConnectedNetworkDetails(applicationContext)
+        preferences.setNetworkState(NetworkInfoProvider.classifyNetworkState(networkDetails))
 
         var profile = preferences.deviceProfileFlow.first()
         val savedHomeBssid = preferences.homeBssidFlow.first()
@@ -173,14 +225,17 @@ class UsageTrackingService : Service() {
         }
 
         updateNotification(notificationText)
-        repository.syncWithRemote()
+        val syncStartedAt = System.currentTimeMillis()
+        val remoteSyncSucceeded = repository.syncWithRemote()
+        val lastPolicySyncAt = preferences.lastPolicySyncAtFlow.first()
+        val policyFresh = remoteSyncSucceeded && lastPolicySyncAt >= syncStartedAt
         profile = preferences.deviceProfileFlow.first()
 
         // Background Enforcement of Quota strictly tied to Home Router
         if (profile != null) {
             val totalGb = profile.quotaLimitGb
             val manualBlock = profile.isBlocked
-            val quotaBlock = enforceVpnBlock && consumedGb >= totalGb && totalGb > 0f && isHomeNetwork
+            val quotaBlock = policyFresh && enforceVpnBlock && consumedGb >= totalGb && totalGb > 0f && isHomeNetwork
             val shouldBlock = manualBlock || quotaBlock
 
             if (shouldBlock) {

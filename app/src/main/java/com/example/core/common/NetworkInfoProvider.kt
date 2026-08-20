@@ -28,7 +28,8 @@ data class NetworkDetails(
     val gateway: String,
     val securityType: String,
     val isMetered: Boolean,
-    val statusText: String
+    val statusText: String,
+    val isValidated: Boolean = false
 )
 
 object NetworkInfoProvider {
@@ -48,6 +49,7 @@ object NetworkInfoProvider {
                 capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
         val isWifi = capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
         val isCellular = capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) == true
+        val isValidated = capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true
 
         var rawSsid = ""
         var rawBssid = ""
@@ -131,8 +133,20 @@ object NetworkInfoProvider {
             securityType = if (isWifi) securityType else "شبكة محمول",
 
             isMetered = isMetered,
-            statusText = statusText
+            statusText = statusText,
+            isValidated = isValidated
         )
+    }
+
+    fun classifyNetworkState(details: NetworkDetails): String {
+        return when {
+            !details.isConnected -> "NO_NETWORK"
+            details.isCellular -> "CELLULAR"
+            !details.isWifi -> "OTHER_TRANSPORT"
+            !details.isValidated -> "WIFI_UNVALIDATED"
+            details.ssid.startsWith("غير متاح") -> "WIFI_SSID_REDACTED"
+            else -> "WIFI_CONNECTED"
+        }
     }
 
     private fun resolveSecurityType(wifiInfo: WifiInfo): String {

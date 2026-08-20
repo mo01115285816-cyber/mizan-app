@@ -5,8 +5,6 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import com.example.data.local.DevicePreferencesDataSource
-import com.example.service.QuotaOverlayService
-import com.example.service.QuotaVpnService
 import com.example.service.UsageTrackingService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -37,17 +35,10 @@ class MizanBootReceiver : BroadcastReceiver() {
                     val profile = preferences.deviceProfileFlow.first()
 
                     if (profile != null && profile.isActive) {
-                        // Immediately resume background Wi-Fi tracking
+                        // Start the foreground monitor first. It fetches the current
+                        // Supabase policy before making any quota-block decision, so a
+                        // locally cached block cannot override a dashboard unblock.
                         UsageTrackingService.start(context.applicationContext)
-
-                        val isExhausted = (profile.currentUsageGb >= profile.quotaLimitGb && profile.quotaLimitGb > 0f) || profile.isBlocked
-                        if (isExhausted && profile.isVpnEnforcementEnabled) {
-                            // Re-engage VPN blocking immediately
-                            if (QuotaVpnService.isVpnPrepared(context.applicationContext)) {
-                                QuotaVpnService.start(context.applicationContext)
-                                QuotaOverlayService.show(context.applicationContext)
-                            }
-                        }
                     }
                 } catch (e: Exception) {
                     Log.e(tag, "Error handling boot broadcast: ${e.message}")

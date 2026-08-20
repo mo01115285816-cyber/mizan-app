@@ -55,6 +55,13 @@ class DevicePreferencesDataSource(private val context: Context) {
         val KEY_USER_PHOTO_URL = stringPreferencesKey("user_photo_url")
         val KEY_WARNING_THRESHOLD = floatPreferencesKey("warning_threshold")
         val KEY_ONLY_HOME_WIFI_ENFORCEMENT = booleanPreferencesKey("only_home_wifi_enforcement")
+        val KEY_SERVICE_HEARTBEAT_AT = longPreferencesKey("service_heartbeat_at")
+        val KEY_LAST_POLICY_SYNC_AT = longPreferencesKey("last_policy_sync_at")
+        val KEY_LAST_TELEMETRY_UPLOAD_AT = longPreferencesKey("last_telemetry_upload_at")
+        val KEY_VPN_STATE = stringPreferencesKey("vpn_state")
+        val KEY_VPN_STATE_CHANGED_AT = longPreferencesKey("vpn_state_changed_at")
+        val KEY_NETWORK_STATE = stringPreferencesKey("network_state")
+        val KEY_PERMISSION_HEALTH = stringPreferencesKey("permission_health")
     }
 
     val userDisplayNameFlow: Flow<String> = context.dataStore.data.map { preferences ->
@@ -139,6 +146,30 @@ class DevicePreferencesDataSource(private val context: Context) {
         preferences[KEY_IS_VPN_CONSENT_GRANTED] ?: false
     }
 
+    val serviceHeartbeatAtFlow: Flow<Long> = context.dataStore.data.map { preferences ->
+        preferences[KEY_SERVICE_HEARTBEAT_AT] ?: 0L
+    }
+
+    val lastPolicySyncAtFlow: Flow<Long> = context.dataStore.data.map { preferences ->
+        preferences[KEY_LAST_POLICY_SYNC_AT] ?: 0L
+    }
+
+    val lastTelemetryUploadAtFlow: Flow<Long> = context.dataStore.data.map { preferences ->
+        preferences[KEY_LAST_TELEMETRY_UPLOAD_AT] ?: 0L
+    }
+
+    val vpnStateFlow: Flow<String> = context.dataStore.data.map { preferences ->
+        preferences[KEY_VPN_STATE] ?: "UNKNOWN"
+    }
+
+    val networkStateFlow: Flow<String> = context.dataStore.data.map { preferences ->
+        preferences[KEY_NETWORK_STATE] ?: "UNKNOWN"
+    }
+
+    val permissionHealthFlow: Flow<String> = context.dataStore.data.map { preferences ->
+        preferences[KEY_PERMISSION_HEALTH] ?: "UNKNOWN"
+    }
+
     suspend fun saveDeviceProfile(profile: DeviceProfile) {
         context.dataStore.edit { preferences ->
             preferences[KEY_IS_LINKED] = true
@@ -202,6 +233,43 @@ class DevicePreferencesDataSource(private val context: Context) {
     suspend fun setDeviceAdminEnabled(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[KEY_IS_DEVICE_ADMIN_ENABLED] = enabled
+        }
+    }
+
+    suspend fun recordServiceHeartbeat(timestamp: Long = System.currentTimeMillis()) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_SERVICE_HEARTBEAT_AT] = timestamp
+        }
+    }
+
+    suspend fun recordPolicySync(timestamp: Long = System.currentTimeMillis()) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_LAST_POLICY_SYNC_AT] = timestamp
+        }
+    }
+
+    suspend fun recordTelemetryUpload(timestamp: Long = System.currentTimeMillis()) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_LAST_TELEMETRY_UPLOAD_AT] = timestamp
+        }
+    }
+
+    suspend fun setVpnState(state: String, timestamp: Long = System.currentTimeMillis()) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_VPN_STATE] = state
+            preferences[KEY_VPN_STATE_CHANGED_AT] = timestamp
+        }
+    }
+
+    suspend fun setNetworkState(state: String) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_NETWORK_STATE] = state
+        }
+    }
+
+    suspend fun setPermissionHealth(state: String) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_PERMISSION_HEALTH] = state
         }
     }
 
