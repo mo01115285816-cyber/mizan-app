@@ -64,7 +64,7 @@ import com.example.core.designsystem.fluidPressEffect
  *
  * Replaces the traditional rigid rectangular toolbar with two ultra-modern,
  * floating independent oval pills (Capsules):
- * 1. Brand Capsule (Left): MIZAN logo, brand identity typography, and active accent badge.
+ * 1. Brand Capsule: MIZAN logo and English brand name only.
  * 2. Quick Actions Capsule (Right): Search with smooth morphing expansion, Wi-Fi status, refresh, and profile avatar.
  *
  * Color Palette:
@@ -76,8 +76,6 @@ import com.example.core.designsystem.fluidPressEffect
  */
 @Composable
 fun MizanTopCapsulesBar(
-    brandTitle: String = "ميزان",
-    brandSubtitle: String? = null,
     showSearch: Boolean = false,
     searchQuery: String = "",
     onSearchQueryChange: (String) -> Unit = {},
@@ -249,7 +247,7 @@ fun MizanTopCapsulesBar(
 
                         // Brand Name
                         Text(
-                            text = brandTitle,
+                            text = "MIZAN",
                             style = TextStyle(
                                 fontFamily = FontFamily.SansSerif,
                                 fontWeight = FontWeight.Bold,
@@ -258,34 +256,6 @@ fun MizanTopCapsulesBar(
                             )
                         )
 
-                        if (brandSubtitle != null) {
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Box(
-                                modifier = Modifier
-                                    .size(4.dp)
-                                    .clip(CircleShape)
-                                    .background(mutedGray)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = brandSubtitle,
-                                style = TextStyle(
-                                    fontFamily = FontFamily.SansSerif,
-                                    fontWeight = FontWeight.Normal,
-                                    fontSize = 12.sp,
-                                    color = mutedGray
-                                )
-                            )
-                        } else {
-                            Spacer(modifier = Modifier.width(6.dp))
-                            // Subtle Lime Active Dot
-                            Box(
-                                modifier = Modifier
-                                    .size(7.dp)
-                                    .clip(CircleShape)
-                                    .background(lime)
-                            )
-                        }
                     }
                 }
 

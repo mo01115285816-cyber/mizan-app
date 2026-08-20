@@ -294,8 +294,6 @@ fun UsageScreen(
 
             MizanTopCapsulesBar(
                 modifier = Modifier.align(Alignment.TopCenter),
-                brandTitle = "الاستهلاك",
-                brandSubtitle = "تحليل حي",
                 showSearch = true,
                 searchQuery = searchQuery,
                 onSearchQueryChange = { searchQuery = it },

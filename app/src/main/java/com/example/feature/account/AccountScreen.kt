@@ -3,6 +3,7 @@ package com.example.feature.account
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -52,6 +54,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -100,19 +103,21 @@ fun AccountScreen(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 16.dp)
-                    .padding(top = 72.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                    .padding(horizontal = 12.dp)
+                    .widthIn(max = 640.dp)
+                    .align(Alignment.CenterHorizontally),
+                contentPadding = PaddingValues(top = 78.dp, bottom = 96.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 // 1. Google Account Card
                 item {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(24.dp))
+                            .clip(RoundedCornerShape(20.dp))
                             .background(MizanColors.WarmWhite)
-                            .border(1.dp, MizanColors.Line, RoundedCornerShape(24.dp))
-                            .padding(18.dp),
+                            .border(1.dp, MizanColors.Line, RoundedCornerShape(20.dp))
+                            .padding(16.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Row(
@@ -152,12 +157,16 @@ fun AccountScreen(
                                 Text(
                                     text = if (userName.isNotBlank()) userName else "عضو عائلة ميزان",
                                     style = MizanTypography.Title,
-                                    color = MizanColors.Charcoal
+                                    color = MizanColors.Charcoal,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
                                     text = if (userEmail.isNotBlank()) userEmail else "حساب Google متصل",
                                     style = MizanTypography.Caption,
-                                    color = MizanColors.MutedGray
+                                    color = MizanColors.MutedGray,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -185,10 +194,10 @@ fun AccountScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(24.dp))
+                            .clip(RoundedCornerShape(20.dp))
                             .background(MizanColors.WarmWhite)
-                            .border(1.dp, MizanColors.Line, RoundedCornerShape(24.dp))
-                            .padding(18.dp),
+                            .border(1.dp, MizanColors.Line, RoundedCornerShape(20.dp))
+                            .padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         Text(
@@ -262,33 +271,38 @@ fun AccountScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(24.dp))
+                            .clip(RoundedCornerShape(20.dp))
                             .background(MizanColors.WarmWhite)
-                            .border(1.dp, MizanColors.Line, RoundedCornerShape(24.dp))
-                            .padding(18.dp),
+                            .border(1.dp, MizanColors.Line, RoundedCornerShape(20.dp))
+                            .padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Row(
+                        Column(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Text(
                                 text = "أذونات وصلاحيات النظام",
                                 style = MizanTypography.Title,
-                                color = MizanColors.Charcoal
+                                color = MizanColors.Charcoal,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
-                            Text(
-                                text = "مركز الأذونات",
-                                style = MizanTypography.Caption,
-                                color = Color(0xFF3F7E16),
-                                fontWeight = FontWeight.Bold,
+                            Box(
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
+                                    .align(Alignment.End)
+                                    .clip(RoundedCornerShape(10.dp))
                                     .background(MizanColors.SoftMint)
-                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
                                     .fluidPressEffect(onClick = onOpenPermissionsHub)
-                            )
+                            ) {
+                                Text(
+                                    text = "فتح مركز الأذونات",
+                                    style = MizanTypography.Caption,
+                                    color = Color(0xFF3F7E16),
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
 
                         PermissionStatusItem(
@@ -316,10 +330,10 @@ fun AccountScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(24.dp))
+                            .clip(RoundedCornerShape(20.dp))
                             .background(MizanColors.WarmWhite)
-                            .border(1.dp, MizanColors.Line, RoundedCornerShape(24.dp))
-                            .padding(18.dp),
+                            .border(1.dp, MizanColors.Line, RoundedCornerShape(20.dp))
+                            .padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Row(
@@ -329,12 +343,17 @@ fun AccountScreen(
                             Text(
                                 text = "إصدار التطبيق",
                                 style = MizanTypography.BodyMedium,
-                                color = MizanColors.Charcoal
+                                color = MizanColors.Charcoal,
+                                modifier = Modifier.weight(1f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = "Mizan v1.0 (Apple Fluid)",
+                                text = "Mizan v1.2",
                                 style = MizanTypography.Caption,
-                                color = MizanColors.MutedGray
+                                color = MizanColors.MutedGray,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
 
@@ -376,10 +395,7 @@ fun AccountScreen(
 
             MizanTopCapsulesBar(
                 modifier = Modifier.align(Alignment.TopCenter),
-                brandTitle = "الإعدادات",
-                brandSubtitle = "الحساب والأمان",
-                onRefreshClick = onSyncNow,
-                userPhotoUrl = userPhotoUrl
+                onRefreshClick = onSyncNow
             )
         }
     }
@@ -457,15 +473,18 @@ private fun PermissionStatusItem(
             Text(
                 text = title,
                 style = MizanTypography.BodyMedium,
-                color = MizanColors.Charcoal
+                color = MizanColors.Charcoal,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
             )
         }
 
         Box(
             modifier = Modifier
+                .widthIn(min = 64.dp)
                 .clip(RoundedCornerShape(8.dp))
                 .background(if (isGranted) MizanColors.SoftMint else MizanColors.ErrorSoft)
-                .padding(horizontal = 8.dp, vertical = 4.dp)
+                .padding(horizontal = 8.dp, vertical = 4.dp),
         ) {
             Text(
                 text = if (isGranted) "مفعلة ✓" else "مطلوبة !",

@@ -287,8 +287,6 @@ private fun HomeDashboardContent(
 
         MizanTopCapsulesBar(
             modifier = Modifier.align(Alignment.TopCenter),
-            brandTitle = "ميزان",
-            brandSubtitle = if (state.userName.isNotBlank()) state.userName else null,
             onWifiClick = onWifiStatusClick,
             isWifiConnected = state.networkDetails.isWifi && state.networkDetails.isConnected,
             onRefreshClick = onRefresh,
