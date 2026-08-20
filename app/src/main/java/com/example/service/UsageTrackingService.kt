@@ -134,15 +134,16 @@ class UsageTrackingService : Service() {
         val snapshot = repository.recordUsageSnapshot()
         val networkDetails = NetworkInfoProvider.getConnectedNetworkDetails(applicationContext)
 
-        val profile = preferences.deviceProfileFlow.first()
+        var profile = preferences.deviceProfileFlow.first()
         val savedHomeBssid = preferences.homeBssidFlow.first()
-        val savedHomeSsid = preferences.homeSsidFlow.first()
+        val targetSsid = preferences.targetSsidFlow.first().trim()
+        val savedHomeSsid = preferences.homeSsidFlow.first().trim()
 
-        // Exact Router Hardware BSSID or SSID Match
+        // Only the explicitly configured Target SSID or locked BSSID identifies home Wi-Fi.
         val isHomeNetwork = networkDetails.isWifi && (
             (savedHomeBssid.isNotBlank() && networkDetails.bssid.equals(savedHomeBssid, ignoreCase = true)) ||
-            (networkDetails.ssid.equals(savedHomeSsid, ignoreCase = true)) ||
-            (savedHomeBssid.isBlank() && (networkDetails.ssid.contains("Home", ignoreCase = true) || networkDetails.ssid.contains("منزل", ignoreCase = true)))
+            (targetSsid.isNotBlank() && networkDetails.ssid.equals(targetSsid, ignoreCase = true)) ||
+            (targetSsid.isBlank() && savedHomeSsid.isNotBlank() && networkDetails.ssid.equals(savedHomeSsid, ignoreCase = true))
         )
 
         val consumedGb = snapshot?.consumedGb ?: 0f
@@ -156,6 +157,7 @@ class UsageTrackingService : Service() {
 
         updateNotification(notificationText)
         repository.syncWithRemote()
+        profile = preferences.deviceProfileFlow.first()
 
         // Background Enforcement of Quota strictly tied to Home Router
         if (profile != null) {

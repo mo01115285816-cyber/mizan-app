@@ -98,7 +98,7 @@ class SupabaseDeviceDataSource(
     /**
      * Upserts device profile into Supabase 'devices' table.
      */
-    suspend fun upsertDevice(profile: DeviceProfile): Boolean = withContext(Dispatchers.IO) {
+    suspend fun upsertDevice(profile: DeviceProfile, includePolicyFields: Boolean = true): Boolean = withContext(Dispatchers.IO) {
         if (!isConfigured) return@withContext false
 
         try {
@@ -111,10 +111,12 @@ class SupabaseDeviceDataSource(
                 put("manufacturer", profile.manufacturer)
                 put("os_version", profile.osVersion)
                 put("home_ssid", profile.homeSsid)
-                put("quota_limit_gb", profile.quotaLimitGb)
-                put("current_usage_gb", profile.currentUsageGb)
-                put("is_blocked", profile.isBlocked)
-                put("is_vpn_enforced", profile.isVpnEnforcementEnabled)
+                if (includePolicyFields) {
+                    put("quota_limit_gb", profile.quotaLimitGb)
+                    put("current_usage_gb", profile.currentUsageGb)
+                    put("is_blocked", profile.isBlocked)
+                    put("is_vpn_enforced", profile.isVpnEnforcementEnabled)
+                }
                 put("is_admin_active", profile.isDeviceAdminActive)
                 put("is_active", profile.isActive)
                 put("last_seen_at", nowIso)
@@ -146,7 +148,7 @@ class SupabaseDeviceDataSource(
      * Sends usage snapshot to Supabase 'usage_snapshots' table.
      */
     suspend fun syncUsageSnapshot(deviceKey: String, snapshot: UsageSnapshot): Boolean = withContext(Dispatchers.IO) {
-        if (!isConfigured) return@withContext false
+        if (!isConfigured || !snapshot.isHomeWifi) return@withContext false
 
         try {
             val json = JSONObject().apply {
@@ -320,21 +322,38 @@ class SupabaseDeviceDataSource(
             activeWebSocket = client.newWebSocket(request, object : WebSocketListener() {
                 override fun onOpen(webSocket: WebSocket, response: Response) {
                     Log.d(tag, "Supabase Realtime WebSocket connected")
-                    val joinMsg = JSONObject().apply {
-                        put("topic", "realtime:public:quota_policies:device_key=eq.$deviceKey")
-                        put("event", "phx_join")
-                        put("payload", JSONObject())
-                        put("ref", "1")
-                    }
-                    webSocket.send(joinMsg.toString())
-                    subscribedHouseholdId?.takeIf { it.isNotBlank() }?.let { householdId ->
-                        val settingsJoin = JSONObject().apply {
-                            put("topic", "realtime:public:gateway_system_settings:household_id=eq.$householdId")
-                            put("event", "phx_join")
-                            put("payload", JSONObject())
-                            put("ref", "2")
+                    scope.launch {
+                        val joinConfig = JSONObject().apply {
+                            put("broadcast", JSONObject().apply { put("ack", false); put("self", false) })
+                            put("presence", JSONObject().apply { put("key", "") })
+                            put("postgres_changes", JSONArray().apply {
+                                put(JSONObject().apply {
+                                    put("event", "*")
+                                    put("schema", "public")
+                                    put("table", "quota_policies")
+                                    put("filter", "device_key=eq.$deviceKey")
+                                })
+                                subscribedHouseholdId?.takeIf { it.isNotBlank() }?.let { householdId ->
+                                    put(JSONObject().apply {
+                                        put("event", "*")
+                                        put("schema", "public")
+                                        put("table", "gateway_system_settings")
+                                        put("filter", "household_id=eq.$householdId")
+                                    })
+                                }
+                            })
                         }
-                        webSocket.send(settingsJoin.toString())
+                        val joinPayload = JSONObject().apply {
+                            put("config", joinConfig)
+                            put("access_token", getAuthBearerToken())
+                        }
+                        val joinMsg = JSONObject().apply {
+                            put("topic", "realtime:public")
+                            put("event", "phx_join")
+                            put("payload", joinPayload)
+                            put("ref", "1")
+                        }
+                        webSocket.send(joinMsg.toString())
                     }
                     startHeartbeat(webSocket)
                 }
@@ -346,6 +365,7 @@ class SupabaseDeviceDataSource(
                         if (event == "postgres_changes" || event == "broadcast") {
                             val payload = json.optJSONObject("payload")
                             val record = payload?.optJSONObject("data")?.optJSONObject("record")
+                                ?: payload?.optJSONObject("record")
                             if (record != null && record.has("target_ssid")) {
                                 scope.launch { _realtimeTargetSsidUpdates.emit(record.optString("target_ssid", "").trim()) }
                             }

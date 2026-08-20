@@ -66,7 +66,7 @@ class MizanRepositoryImpl(
 
     override suspend fun saveDeviceProfile(profile: DeviceProfile): Boolean {
         // The device must be accepted by Supabase before it is marked linked locally.
-        val remoteSuccess = supabaseDataSource.upsertDevice(profile)
+        val remoteSuccess = supabaseDataSource.upsertDevice(profile, includePolicyFields = false)
         if (!remoteSuccess) return false
 
         preferencesDataSource.saveDeviceProfile(profile)
@@ -114,7 +114,7 @@ class MizanRepositoryImpl(
             preferencesDataSource.updateQuotaLimit(quotaPolicy.monthlyLimitGb)
             preferencesDataSource.setBlockedStatus(quotaPolicy.isBlocked)
         }
-        return supabaseDataSource.upsertDevice(profile)
+        return supabaseDataSource.upsertDevice(profile, includePolicyFields = false)
     }
 
     override fun getQuotaPolicy(): Flow<QuotaPolicy?> = flow {
