@@ -36,10 +36,14 @@ android {
       keyPassword = System.getenv("KEY_PASSWORD")
     }
     create("debugConfig") {
-      storeFile = file("${rootDir}/debug.keystore")
-      storePassword = "android"
-      keyAlias = "androiddebugkey"
-      keyPassword = "android"
+      val debugKeystorePath = System.getenv("DEBUG_KEYSTORE_PATH") ?: "${rootDir}/debug.keystore"
+      val debugKeystorePassword = System.getenv("DEBUG_KEYSTORE_PASSWORD") ?: "android"
+      val debugKeyAlias = System.getenv("DEBUG_KEY_ALIAS") ?: "androiddebugkey"
+      val debugKeyPassword = System.getenv("DEBUG_KEY_PASSWORD") ?: debugKeystorePassword
+      storeFile = file(debugKeystorePath)
+      storePassword = debugKeystorePassword
+      keyAlias = debugKeyAlias
+      keyPassword = debugKeyPassword
     }
   }
 

@@ -57,10 +57,24 @@ jobs:
           cp .env.example .env
           chmod 600 .env
 
-      - name: Create the debug keystore required by this project
+      - name: Prepare stable debug signing key
         shell: bash
+        env:
+          DEBUG_KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
+          DEBUG_KEYSTORE_PASSWORD: ${{ secrets.DEBUG_KEYSTORE_PASSWORD }}
+          DEBUG_KEY_ALIAS: ${{ secrets.DEBUG_KEY_ALIAS }}
+          DEBUG_KEY_PASSWORD: ${{ secrets.DEBUG_KEY_PASSWORD }}
         run: |
-          if [ ! -f debug.keystore ]; then
+          if [ -n "$DEBUG_KEYSTORE_BASE64" ] && [ -n "$DEBUG_KEYSTORE_PASSWORD" ] && [ -n "$DEBUG_KEY_ALIAS" ] && [ -n "$DEBUG_KEY_PASSWORD" ]; then
+            printf '%s' "$DEBUG_KEYSTORE_BASE64" | base64 --decode > "$GITHUB_WORKSPACE/debug.keystore"
+            chmod 600 "$GITHUB_WORKSPACE/debug.keystore"
+            {
+              echo "DEBUG_KEYSTORE_PATH=$GITHUB_WORKSPACE/debug.keystore"
+              echo "DEBUG_KEYSTORE_PASSWORD=$DEBUG_KEYSTORE_PASSWORD"
+              echo "DEBUG_KEY_ALIAS=$DEBUG_KEY_ALIAS"
+              echo "DEBUG_KEY_PASSWORD=$DEBUG_KEY_PASSWORD"
+            } >> "$GITHUB_ENV"
+          else
             keytool -genkeypair -v \
               -keystore debug.keystore \
               -storepass android \
@@ -70,8 +84,8 @@ jobs:
               -keysize 2048 \
               -validity 10000 \
               -dname 'CN=Android Debug,O=Android,C=US'
+            chmod 600 debug.keystore
           fi
-          chmod 600 debug.keystore
 
       - name: Build Debug APK from the uploaded source
         run: ./gradlew --no-daemon assembleDebug --stacktrace
