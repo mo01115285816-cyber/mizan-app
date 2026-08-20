@@ -57,11 +57,8 @@ class MizanRepositoryImpl(
         // Apply realtime quota and Target SSID updates as soon as the dashboard changes them.
         scope.launch {
             supabaseDataSource.realtimePolicyUpdates.collect { updatedPolicy ->
-                preferencesDataSource.updateQuotaLimit(updatedPolicy.monthlyLimitGb)
-                preferencesDataSource.setBlockedStatus(updatedPolicy.isBlocked)
-                preferencesDataSource.setRemoteEnforceVpnBlock(updatedPolicy.enforceVpnBlock)
-                preferencesDataSource.recordPolicySync()
-                if (!updatedPolicy.isBlocked) {
+                val applied = applyRemotePolicy(updatedPolicy)
+                if (applied && !updatedPolicy.isBlocked) {
                     QuotaVpnService.stop(context)
                     QuotaOverlayService.hide(context)
                 }
@@ -69,9 +66,11 @@ class MizanRepositoryImpl(
             }
         }
         scope.launch {
-            supabaseDataSource.realtimeTargetSsidUpdates.collect { targetSsid ->
-                preferencesDataSource.setTargetSsid(targetSsid)
-                preferencesDataSource.setHomeBssid("")
+            supabaseDataSource.realtimeTargetNetworkUpdates.collect { targetNetwork ->
+                preferencesDataSource.setTargetSsid(targetNetwork.ssid)
+                preferencesDataSource.setTargetBssid(targetNetwork.bssid)
+                if (targetNetwork.bssid.isNotBlank()) preferencesDataSource.setHomeBssid("")
+                UsageTrackingService.refreshNow(context)
             }
         }
     }
@@ -96,8 +95,11 @@ class MizanRepositoryImpl(
             }
         }
 
-        val targetSsid = supabaseDataSource.fetchTargetSsid(profile.householdId)
-        if (targetSsid != null) preferencesDataSource.setTargetSsid(targetSsid)
+        val targetNetwork = supabaseDataSource.fetchTargetNetwork(profile.householdId)
+        if (targetNetwork != null) {
+            preferencesDataSource.setTargetSsid(targetNetwork.ssid)
+            preferencesDataSource.setTargetBssid(targetNetwork.bssid)
+        }
 
         // Fairness baseline: capture only Wi-Fi counters at the exact moment
         // the device is linked. Pre-activation traffic never enters Mizan quota.
@@ -119,10 +121,9 @@ class MizanRepositoryImpl(
         scope.launch {
             val remotePolicy = supabaseDataSource.fetchQuotaPolicy(profile.deviceKey)
             if (remotePolicy != null) {
-                preferencesDataSource.updateQuotaLimit(remotePolicy.monthlyLimitGb)
-                preferencesDataSource.setBlockedStatus(remotePolicy.isBlocked)
-                preferencesDataSource.setRemoteEnforceVpnBlock(remotePolicy.enforceVpnBlock)
-                preferencesDataSource.recordPolicySync()
+                applyRemotePolicy(remotePolicy)
+                if (remotePolicy.targetBssid.isNotBlank()) preferencesDataSource.setTargetBssid(remotePolicy.targetBssid)
+                if (remotePolicy.homeSsid.isNotBlank()) preferencesDataSource.setTargetSsid(remotePolicy.homeSsid)
             }
         }
 
@@ -139,10 +140,14 @@ class MizanRepositoryImpl(
         val profile = getDeviceProfileSync() ?: return false
         val quotaPolicy = supabaseDataSource.fetchQuotaPolicy(profile.deviceKey)
         if (quotaPolicy != null) {
-            preferencesDataSource.updateQuotaLimit(quotaPolicy.monthlyLimitGb)
-            preferencesDataSource.setBlockedStatus(quotaPolicy.isBlocked)
-            preferencesDataSource.setRemoteEnforceVpnBlock(quotaPolicy.enforceVpnBlock)
-            preferencesDataSource.recordPolicySync()
+            applyRemotePolicy(quotaPolicy)
+            if (quotaPolicy.targetBssid.isNotBlank()) preferencesDataSource.setTargetBssid(quotaPolicy.targetBssid)
+            if (quotaPolicy.homeSsid.isNotBlank()) preferencesDataSource.setTargetSsid(quotaPolicy.homeSsid)
+        }
+        val targetNetwork = supabaseDataSource.fetchTargetNetwork(profile.householdId)
+        if (targetNetwork != null) {
+            preferencesDataSource.setTargetSsid(targetNetwork.ssid)
+            preferencesDataSource.setTargetBssid(targetNetwork.bssid)
         }
         val networkDetails = NetworkInfoProvider.getConnectedNetworkDetails(context)
         preferencesDataSource.setNetworkState(NetworkInfoProvider.classifyNetworkState(networkDetails))
@@ -152,6 +157,18 @@ class MizanRepositoryImpl(
         val success = supabaseDataSource.upsertDevice(profile, includePolicyFields = false)
         syncHealth(profile.deviceKey)
         return success
+    }
+
+    private suspend fun applyRemotePolicy(policy: QuotaPolicy): Boolean {
+        val currentVersion = preferencesDataSource.policyVersionFlow.first()
+        if (policy.policyVersion < currentVersion) return false
+        preferencesDataSource.updateQuotaLimit(policy.monthlyLimitGb)
+        preferencesDataSource.setBlockedStatus(policy.isBlocked)
+        preferencesDataSource.setRemoteEnforceVpnBlock(policy.enforceVpnBlock)
+        preferencesDataSource.setBlockedScope(policy.blockedScope)
+        preferencesDataSource.setPolicyVersion(policy.policyVersion, policy.policyUpdatedAt)
+        preferencesDataSource.recordPolicySync()
+        return true
     }
 
     suspend fun syncHealth(deviceKey: String? = null): Boolean {
@@ -200,19 +217,18 @@ class MizanRepositoryImpl(
             val profile = getDeviceProfileSync()
             val totalGb = profile?.quotaLimitGb ?: 0f
             val homeSsid = profile?.homeSsid ?: ""
-            val targetSsid = preferencesDataSource.targetSsidFlow.first().ifBlank { homeSsid }
+            val targetSsid = preferencesDataSource.targetSsidFlow.first()
+            val targetBssid = preferencesDataSource.targetBssidFlow.first()
             val homeBssid = preferencesDataSource.homeBssidFlow.first()
             val baseline = preferencesDataSource.getWifiBaseline()
 
-            val isHome = networkDetails.isWifi && (
-                (homeBssid.isNotBlank() && networkDetails.bssid.equals(homeBssid, ignoreCase = true)) ||
-                (targetSsid.isNotBlank() && networkDetails.ssid.equals(targetSsid, ignoreCase = true))
+            val isHome = NetworkInfoProvider.matchesTargetNetwork(
+                details = networkDetails,
+                targetSsid = targetSsid,
+                targetBssid = targetBssid,
+                legacyHomeBssid = homeBssid,
+                fallbackSsid = homeSsid
             )
-
-            // Auto-lock router BSSID on first confirmed home connection
-            if (isHome && homeBssid.isBlank() && networkDetails.bssid.isNotBlank()) {
-                preferencesDataSource.setHomeBssid(networkDetails.bssid)
-            }
 
             // The quota cycle is anchored to the Wi-Fi baseline, not the
             // historical beginning-of-month counter.
@@ -314,22 +330,31 @@ class MizanRepositoryImpl(
         val networkDetails = NetworkInfoProvider.getConnectedNetworkDetails(context)
         val profile = getDeviceProfileSync()
         val homeSsid = profile?.homeSsid ?: ""
-        val targetSsid = preferencesDataSource.targetSsidFlow.first().ifBlank { homeSsid }
+        val targetSsid = preferencesDataSource.targetSsidFlow.first()
+        val targetBssid = preferencesDataSource.targetBssidFlow.first()
         val homeBssid = preferencesDataSource.homeBssidFlow.first()
 
-        val isHome = networkDetails.isWifi && (
-            (homeBssid.isNotBlank() && networkDetails.bssid.equals(homeBssid, ignoreCase = true)) ||
-            (targetSsid.isNotBlank() && networkDetails.ssid.equals(targetSsid, ignoreCase = true))
+        val isHome = NetworkInfoProvider.matchesTargetNetwork(
+            details = networkDetails,
+            targetSsid = targetSsid,
+            targetBssid = targetBssid,
+            legacyHomeBssid = homeBssid,
+            fallbackSsid = homeSsid
         )
 
-        // Auto-lock router BSSID on first confirmed target-network connection
-        if (isHome && homeBssid.isBlank() && networkDetails.bssid.isNotBlank()) {
-            preferencesDataSource.setHomeBssid(networkDetails.bssid)
-        }
+        val endTime = System.currentTimeMillis()
+        val currentMonth = monthKey(endTime)
+        val monthStart = monthStart(endTime)
+        val (rx, tx) = networkStatsDataSource.queryTotalWifiUsage(monthStart, endTime)
+        val currentTotalWifi = rx + tx
 
         if (!isHome) {
+            // NetworkStatsManager aggregates all Wi-Fi transports and cannot filter by BSSID.
+            // Move the cursor while away from Target Wi-Fi so other Wi-Fi traffic is discarded,
+            // rather than being attributed to the home quota when the device returns.
+            preferencesDataSource.updateLastKnownTotalWifiBytes(currentTotalWifi)
             return UsageSnapshot(
-                timestamp = System.currentTimeMillis(),
+                timestamp = endTime,
                 uploadBytes = 0L,
                 downloadBytes = 0L,
                 totalBytes = 0L,
@@ -339,12 +364,6 @@ class MizanRepositoryImpl(
                 appSnapshots = emptyList()
             )
         }
-
-        val endTime = System.currentTimeMillis()
-        val currentMonth = monthKey(endTime)
-        val monthStart = monthStart(endTime)
-        val (rx, tx) = networkStatsDataSource.queryTotalWifiUsage(monthStart, endTime)
-        val currentTotalWifi = rx + tx
         val baseline = preferencesDataSource.getWifiBaseline()
 
         // A missing or stale baseline is initialized now and contributes zero usage.

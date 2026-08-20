@@ -199,23 +199,26 @@ class UsageTrackingService : Service() {
     private suspend fun checkAndSyncUsage() {
         preferences.recordServiceHeartbeat()
         val snapshot = repository.recordUsageSnapshot()
-        val networkDetails = NetworkInfoProvider.getConnectedNetworkDetails(applicationContext)
+        var networkDetails = NetworkInfoProvider.getConnectedNetworkDetails(applicationContext)
         preferences.setNetworkState(NetworkInfoProvider.classifyNetworkState(networkDetails))
 
         var profile = preferences.deviceProfileFlow.first()
         val savedHomeBssid = preferences.homeBssidFlow.first()
         val targetSsid = preferences.targetSsidFlow.first().trim()
+        val targetBssid = preferences.targetBssidFlow.first().trim()
         val savedHomeSsid = preferences.homeSsidFlow.first().trim()
 
-        // Only the explicitly configured Target SSID or locked BSSID identifies home Wi-Fi.
-        val isHomeNetwork = networkDetails.isWifi && (
-            (savedHomeBssid.isNotBlank() && networkDetails.bssid.equals(savedHomeBssid, ignoreCase = true)) ||
-            (targetSsid.isNotBlank() && networkDetails.ssid.equals(targetSsid, ignoreCase = true)) ||
-            (targetSsid.isBlank() && savedHomeSsid.isNotBlank() && networkDetails.ssid.equals(savedHomeSsid, ignoreCase = true))
+        // Target BSSID is authoritative when present; SSID is the safe fallback.
+        var isHomeNetwork = NetworkInfoProvider.matchesTargetNetwork(
+            details = networkDetails,
+            targetSsid = targetSsid,
+            targetBssid = targetBssid,
+            legacyHomeBssid = savedHomeBssid,
+            fallbackSsid = savedHomeSsid
         )
 
         val consumedGb = snapshot?.consumedGb ?: 0f
-        val enforceVpnBlock = preferences.remoteEnforceVpnBlockFlow.first()
+        var enforceVpnBlock = preferences.remoteEnforceVpnBlockFlow.first()
         val notificationText = if (isHomeNetwork) {
             "متصل بشبكة المنزل (${networkDetails.ssid}) • الاستهلاك: ${consumedGb} جيجابايت"
         } else if (networkDetails.isCellular) {
@@ -230,13 +233,23 @@ class UsageTrackingService : Service() {
         val lastPolicySyncAt = preferences.lastPolicySyncAtFlow.first()
         val policyFresh = remoteSyncSucceeded && lastPolicySyncAt >= syncStartedAt
         profile = preferences.deviceProfileFlow.first()
+        enforceVpnBlock = preferences.remoteEnforceVpnBlockFlow.first()
+        networkDetails = NetworkInfoProvider.getConnectedNetworkDetails(applicationContext)
+        isHomeNetwork = NetworkInfoProvider.matchesTargetNetwork(
+            details = networkDetails,
+            targetSsid = preferences.targetSsidFlow.first().trim(),
+            targetBssid = preferences.targetBssidFlow.first().trim(),
+            legacyHomeBssid = preferences.homeBssidFlow.first(),
+            fallbackSsid = preferences.homeSsidFlow.first().trim()
+        )
 
-        // Background Enforcement of Quota strictly tied to Home Router
+        // Both manual and automatic enforcement are scoped to the configured home Wi-Fi.
         if (profile != null) {
             val totalGb = profile.quotaLimitGb
             val manualBlock = profile.isBlocked
             val quotaBlock = policyFresh && enforceVpnBlock && consumedGb >= totalGb && totalGb > 0f && isHomeNetwork
-            val shouldBlock = manualBlock || quotaBlock
+            val blockedScope = preferences.blockedScopeFlow.first()
+            val shouldBlock = blockedScope == "TARGET_WIFI_ONLY" && isHomeNetwork && (manualBlock || quotaBlock)
 
             if (shouldBlock) {
                 if (profile.isVpnEnforcementEnabled && QuotaVpnService.isVpnPrepared(applicationContext)) {

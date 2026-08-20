@@ -138,6 +138,25 @@ object NetworkInfoProvider {
         )
     }
 
+    fun matchesTargetNetwork(
+        details: NetworkDetails,
+        targetSsid: String,
+        targetBssid: String,
+        legacyHomeBssid: String = "",
+        fallbackSsid: String = ""
+    ): Boolean {
+        if (!details.isWifi || !details.isConnected) return false
+        val configuredBssid = targetBssid.trim().ifBlank { legacyHomeBssid.trim() }
+        val configuredSsid = targetSsid.trim().ifBlank { fallbackSsid.trim() }
+        val observedSsidUsable = details.ssid.isNotBlank() && !details.ssid.startsWith("غير متاح")
+        if (configuredBssid.isNotBlank()) {
+            return details.bssid.isNotBlank() &&
+                details.bssid.equals(configuredBssid, ignoreCase = true)
+        }
+        return configuredSsid.isNotBlank() && observedSsidUsable &&
+            details.ssid.equals(configuredSsid, ignoreCase = true)
+    }
+
     fun classifyNetworkState(details: NetworkDetails): String {
         return when {
             !details.isConnected -> "NO_NETWORK"

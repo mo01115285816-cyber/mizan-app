@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlin.math.max
@@ -285,7 +286,14 @@ class MizanViewModel(
                     )
                 }
 
-                val isExhausted = profile.isBlocked || (enforceVpnBlock && quota.usedGigabytes >= quota.totalGigabytes && quota.totalGigabytes > 0f)
+                val isTargetNetwork = NetworkInfoProvider.matchesTargetNetwork(
+                    details = networkDetails,
+                    targetSsid = preferences.targetSsidFlow.first(),
+                    targetBssid = preferences.targetBssidFlow.first(),
+                    legacyHomeBssid = preferences.homeBssidFlow.first(),
+                    fallbackSsid = profile.homeSsid
+                )
+                val isExhausted = isTargetNetwork && (profile.isBlocked || (enforceVpnBlock && quota.usedGigabytes >= quota.totalGigabytes && quota.totalGigabytes > 0f))
                 if (isExhausted) {
                     _appState.value = AppState.QuotaExhausted(
                         reason = if (profile.isBlocked) "تم إيقاف الاتصال من قبل إدارة الشبكة" else "اكتملت حصتك الشهرية المحددة"

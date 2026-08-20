@@ -33,6 +33,7 @@ class DevicePreferencesDataSource(private val context: Context) {
         val KEY_IS_LINKED = booleanPreferencesKey("is_linked")
         val KEY_HOME_SSID = stringPreferencesKey("home_ssid")
         val KEY_TARGET_SSID = stringPreferencesKey("target_ssid")
+        val KEY_TARGET_BSSID = stringPreferencesKey("target_bssid")
         val KEY_HOME_BSSID = stringPreferencesKey("home_bssid")
         val KEY_QUOTA_LIMIT_GB = floatPreferencesKey("quota_limit_gb")
         val KEY_CURRENT_USAGE_GB = floatPreferencesKey("current_usage_gb")
@@ -47,6 +48,9 @@ class DevicePreferencesDataSource(private val context: Context) {
         val KEY_LAST_SYNC_TIME = longPreferencesKey("last_sync_time")
         val KEY_IS_BLOCKED = booleanPreferencesKey("is_blocked")
         val KEY_REMOTE_ENFORCE_VPN_BLOCK = booleanPreferencesKey("remote_enforce_vpn_block")
+        val KEY_BLOCKED_SCOPE = stringPreferencesKey("blocked_scope")
+        val KEY_POLICY_VERSION = longPreferencesKey("policy_version")
+        val KEY_POLICY_UPDATED_AT = stringPreferencesKey("policy_updated_at")
         val KEY_IS_VPN_CONSENT_GRANTED = booleanPreferencesKey("is_vpn_consent_granted")
         val KEY_IS_DEVICE_ADMIN_ENABLED = booleanPreferencesKey("is_device_admin_enabled")
         val KEY_IS_ACTIVE = booleanPreferencesKey("is_active")
@@ -132,6 +136,18 @@ class DevicePreferencesDataSource(private val context: Context) {
 
     val homeBssidFlow: Flow<String> = context.dataStore.data.map { preferences ->
         preferences[KEY_HOME_BSSID] ?: ""
+    }
+
+    val targetBssidFlow: Flow<String> = context.dataStore.data.map { preferences ->
+        preferences[KEY_TARGET_BSSID] ?: ""
+    }
+
+    val blockedScopeFlow: Flow<String> = context.dataStore.data.map { preferences ->
+        preferences[KEY_BLOCKED_SCOPE] ?: "TARGET_WIFI_ONLY"
+    }
+
+    val policyVersionFlow: Flow<Long> = context.dataStore.data.map { preferences ->
+        preferences[KEY_POLICY_VERSION] ?: 0L
     }
 
     val isBlockedFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
@@ -220,7 +236,29 @@ class DevicePreferencesDataSource(private val context: Context) {
 
     suspend fun setHomeBssid(bssid: String) {
         context.dataStore.edit { preferences ->
-            preferences[KEY_HOME_BSSID] = bssid
+            preferences[KEY_HOME_BSSID] = bssid.trim()
+        }
+    }
+
+    suspend fun setTargetBssid(bssid: String) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_TARGET_BSSID] = bssid.trim()
+        }
+    }
+
+    suspend fun setBlockedScope(scope: String) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_BLOCKED_SCOPE] = if (scope == "TARGET_WIFI_ONLY") scope else "TARGET_WIFI_ONLY"
+        }
+    }
+
+    suspend fun setPolicyVersion(version: Long, updatedAt: String? = null) {
+        context.dataStore.edit { preferences ->
+            val current = preferences[KEY_POLICY_VERSION] ?: 0L
+            if (version >= current) {
+                preferences[KEY_POLICY_VERSION] = version
+                if (!updatedAt.isNullOrBlank()) preferences[KEY_POLICY_UPDATED_AT] = updatedAt
+            }
         }
     }
 

@@ -40,6 +40,11 @@ data class DeviceHealthPayload(
     val permissionHealth: String
 )
 
+data class TargetNetworkUpdate(
+    val ssid: String,
+    val bssid: String
+)
+
 class SupabaseDeviceDataSource(
     private val authRepository: SupabaseAuthRepository? = null,
     private val client: OkHttpClient = OkHttpClient.Builder()
@@ -57,8 +62,8 @@ class SupabaseDeviceDataSource(
 
     private val _realtimePolicyUpdates = MutableSharedFlow<QuotaPolicy>(extraBufferCapacity = 10)
     val realtimePolicyUpdates: SharedFlow<QuotaPolicy> = _realtimePolicyUpdates.asSharedFlow()
-    private val _realtimeTargetSsidUpdates = MutableSharedFlow<String>(extraBufferCapacity = 10)
-    val realtimeTargetSsidUpdates: SharedFlow<String> = _realtimeTargetSsidUpdates.asSharedFlow()
+    private val _realtimeTargetNetworkUpdates = MutableSharedFlow<TargetNetworkUpdate>(extraBufferCapacity = 10)
+    val realtimeTargetNetworkUpdates: SharedFlow<TargetNetworkUpdate> = _realtimeTargetNetworkUpdates.asSharedFlow()
 
     private var activeWebSocket: WebSocket? = null
     private var heartbeatJob: Job? = null
@@ -180,6 +185,7 @@ class SupabaseDeviceDataSource(
         try {
             val payload = JSONObject().apply {
                 put("latest_ssid", details.ssid)
+                put("latest_bssid", details.bssid)
                 put("latest_gateway_ip", details.gateway)
                 put("latest_wifi_band", details.frequencyGhz)
                 put("latest_security_type", details.securityType)
@@ -357,8 +363,12 @@ class SupabaseDeviceDataSource(
                 monthlyLimitGb = item.optDouble("monthly_limit_gb", 0.0).toFloat(),
                 warningThresholdPercent = item.optInt("warning_threshold_percent", 85),
                 homeSsid = item.optString("home_ssid", ""),
+                targetBssid = item.optString("target_bssid", ""),
                 enforceVpnBlock = item.optBoolean("enforce_vpn_block", false),
                 isBlocked = item.optBoolean("is_blocked", false),
+                blockedScope = item.optString("blocked_scope", "TARGET_WIFI_ONLY").ifBlank { "TARGET_WIFI_ONLY" },
+                policyVersion = item.optLong("policy_version", 1L),
+                policyUpdatedAt = item.optString("policy_updated_at", null),
                 reason = item.optString("reason", null)
             )
         } catch (e: Exception) {
@@ -367,12 +377,12 @@ class SupabaseDeviceDataSource(
         }
     }
 
-    suspend fun fetchTargetSsid(householdId: String): String? = withContext(Dispatchers.IO) {
+    suspend fun fetchTargetNetwork(householdId: String): TargetNetworkUpdate? = withContext(Dispatchers.IO) {
         if (!isConfigured || householdId.isBlank()) return@withContext null
         try {
             val bearer = getAuthBearerToken()
             val request = Request.Builder()
-                .url("$supabaseUrl/rest/v1/gateway_system_settings?household_id=eq.$householdId&select=target_ssid&limit=1")
+                .url("$supabaseUrl/rest/v1/gateway_system_settings?household_id=eq.$householdId&select=target_ssid,target_bssid&limit=1")
                 .header("apikey", anonKey)
                 .header("Authorization", "Bearer $bearer")
                 .get()
@@ -385,7 +395,13 @@ class SupabaseDeviceDataSource(
             val body = response.body?.string() ?: "[]"
             response.close()
             val array = JSONArray(body)
-            if (array.length() == 0) null else array.getJSONObject(0).optString("target_ssid", "").trim()
+            if (array.length() == 0) null else {
+                val item = array.getJSONObject(0)
+                TargetNetworkUpdate(
+                    ssid = item.optString("target_ssid", "").trim(),
+                    bssid = item.optString("target_bssid", "").trim()
+                )
+            }
         } catch (e: Exception) {
             Log.w(tag, "Failed to fetch target SSID: ${e.message}")
             null
@@ -453,7 +469,14 @@ class SupabaseDeviceDataSource(
                             val record = payload?.optJSONObject("data")?.optJSONObject("record")
                                 ?: payload?.optJSONObject("record")
                             if (record != null && record.has("target_ssid")) {
-                                scope.launch { _realtimeTargetSsidUpdates.emit(record.optString("target_ssid", "").trim()) }
+                                scope.launch {
+                                    _realtimeTargetNetworkUpdates.emit(
+                                        TargetNetworkUpdate(
+                                            ssid = record.optString("target_ssid", "").trim(),
+                                            bssid = record.optString("target_bssid", "").trim()
+                                        )
+                                    )
+                                }
                             }
                             if (record != null && record.has("device_key")) {
                                 val updatedPolicy = QuotaPolicy(
@@ -461,8 +484,12 @@ class SupabaseDeviceDataSource(
                                     monthlyLimitGb = record.optDouble("monthly_limit_gb", 0.0).toFloat(),
                                     warningThresholdPercent = record.optInt("warning_threshold_percent", 85),
                                     homeSsid = record.optString("home_ssid", ""),
+                                    targetBssid = record.optString("target_bssid", ""),
                                     enforceVpnBlock = record.optBoolean("enforce_vpn_block", false),
                                     isBlocked = record.optBoolean("is_blocked", false),
+                                    blockedScope = record.optString("blocked_scope", "TARGET_WIFI_ONLY").ifBlank { "TARGET_WIFI_ONLY" },
+                                    policyVersion = record.optLong("policy_version", 1L),
+                                    policyUpdatedAt = record.optString("policy_updated_at", null),
                                     reason = record.optString("reason", null)
                                 )
                                 scope.launch { _realtimePolicyUpdates.emit(updatedPolicy) }
