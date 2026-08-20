@@ -37,6 +37,7 @@ import com.example.feature.home.HomeScreen
 import com.example.feature.setup.SetupScreen
 import com.example.ui.viewmodel.MizanViewModel
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import kotlinx.coroutines.launch
 
@@ -170,8 +171,35 @@ class MainActivity : ComponentActivity() {
                                 viewModel.onSignInError("نوع بيانات الاعتماد المستلمة غير مدعوم")
                             }
                         } catch (e: NoCredentialException) {
-                            Log.w("MainActivity", "No eligible Google credential was returned", e)
-                            viewModel.onSignInError("لم يتم العثور على حساب Google مؤهل لتسجيل الدخول بهذا التطبيق، يرجى التأكد من إعداد Google Play Services وOAuth ثم المحاولة مجدداً")
+                            Log.w("MainActivity", "No credential from Google ID option; trying explicit Google sign-in", e)
+                            try {
+                                val fallbackOption = GetSignInWithGoogleOption.Builder()
+                                    .setServerClientId(serverClientId)
+                                    .setNonce(hashedNonce)
+                                    .build()
+                                val fallbackRequest = GetCredentialRequest.Builder()
+                                    .addCredentialOption(fallbackOption)
+                                    .build()
+                                val fallbackResult = credentialManager.getCredential(
+                                    request = fallbackRequest,
+                                    context = this@MainActivity
+                                )
+                                val fallbackCredential = fallbackResult.credential
+                                if (fallbackCredential is CustomCredential && fallbackCredential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
+                                    val fallbackGoogleCredential = GoogleIdTokenCredential.createFrom(fallbackCredential.data)
+                                    viewModel.signInWithGoogle(
+                                        idToken = fallbackGoogleCredential.idToken,
+                                        rawNonce = rawNonce,
+                                        displayName = fallbackGoogleCredential.displayName,
+                                        photoUrl = fallbackGoogleCredential.profilePictureUri?.toString()
+                                    )
+                                } else {
+                                    viewModel.onSignInError("لم يتم العثور على حساب Google مؤهل في خدمات Google")
+                                }
+                            } catch (fallbackError: Exception) {
+                                Log.e("MainActivity", "Both Google credential flows failed", fallbackError)
+                                viewModel.onSignInError("لم يتم العثور على حساب Google مؤهل. افتح خدمات Google Play ثم أعد المحاولة")
+                            }
                         } catch (e: androidx.credentials.exceptions.GetCredentialCancellationException) {
                             // Do not silently turn every cancellation exception into SignedOut.
                             // On some Google Play Services versions this exception is also used
