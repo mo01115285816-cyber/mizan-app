@@ -1,6 +1,7 @@
 package com.example.data.repository
 
 import android.content.Context
+import android.net.NetworkCapabilities
 import android.provider.Settings
 import com.example.core.common.NetworkInfoProvider
 import com.example.core.common.Resource
@@ -63,6 +64,21 @@ class MizanRepositoryImpl(
         if (!remoteSuccess) return false
 
         preferencesDataSource.saveDeviceProfile(profile)
+
+        // Fairness baseline: capture only Wi-Fi counters at the exact moment
+        // the device is linked. Pre-activation traffic never enters Mizan quota.
+        val now = System.currentTimeMillis()
+        val currentMonth = monthKey(now)
+        val existingBaseline = preferencesDataSource.getWifiBaseline()
+        if (!existingBaseline.initialized || existingBaseline.monthKey != currentMonth) {
+            if (networkStatsDataSource.hasUsageStatsPermission()) {
+                val (rx, tx) = networkStatsDataSource.queryTotalWifiUsage(monthStart(now), now)
+                preferencesDataSource.setWifiBaseline(rx, tx, now, currentMonth)
+            } else {
+                // The first valid read after Usage Access is granted becomes baseline.
+                preferencesDataSource.resetWifiUsageBaseline()
+            }
+        }
 
         // Quota policy belongs to the household administrator. Fetch it after linking
         // so registration is not blocked by a second sequential network request.
@@ -137,14 +153,9 @@ class MizanRepositoryImpl(
                 preferencesDataSource.setHomeBssid(networkDetails.bssid)
             }
 
-            // Start of current month (billing cycle)
+            // The quota cycle is anchored to the Wi-Fi baseline, not the
+            // historical beginning-of-month counter.
             val calendar = Calendar.getInstance()
-            calendar.set(Calendar.DAY_OF_MONTH, 1)
-            calendar.set(Calendar.HOUR_OF_DAY, 0)
-            calendar.set(Calendar.MINUTE, 0)
-            calendar.set(Calendar.SECOND, 0)
-            calendar.set(Calendar.MILLISECOND, 0)
-
             var usedGb: Float
             if (hasPermission) {
                 // Record snapshot & compute delta
@@ -198,15 +209,20 @@ class MizanRepositoryImpl(
                 return@flow
             }
 
-            val calendar = Calendar.getInstance()
-            calendar.set(Calendar.DAY_OF_MONTH, 1)
-            calendar.set(Calendar.HOUR_OF_DAY, 0)
-            calendar.set(Calendar.MINUTE, 0)
-            calendar.set(Calendar.SECOND, 0)
-            val startTime = calendar.timeInMillis
-            val endTime = System.currentTimeMillis()
+            val baseline = preferencesDataSource.getWifiBaseline()
+            if (!baseline.initialized) {
+                emit(Resource.Success(emptyList()))
+                return@flow
+            }
 
-            val apps = networkStatsDataSource.queryTopAppsUsage(startTime, endTime, limit = 8)
+            val endTime = System.currentTimeMillis()
+            val startTime = baseline.timestamp.coerceAtMost(endTime)
+            val apps = networkStatsDataSource.queryTopAppsUsage(
+                startTime = startTime,
+                endTime = endTime,
+                networkType = NetworkCapabilities.TRANSPORT_WIFI,
+                limit = 8
+            )
             emit(Resource.Success(apps))
         } catch (e: Exception) {
             emit(Resource.Error(e.message ?: "فشل في قراءة إحصاءات التطبيقات"))
@@ -214,7 +230,10 @@ class MizanRepositoryImpl(
     }.flowOn(Dispatchers.IO)
 
     override fun getDailyUsageTrend(): Flow<List<DayUsage>> = flow {
-        val trend = networkStatsDataSource.query7DayTrend()
+        val baseline = preferencesDataSource.getWifiBaseline()
+        val trend = networkStatsDataSource.query7DayTrend(
+            startFrom = if (baseline.initialized) baseline.timestamp else Long.MAX_VALUE
+        )
         emit(trend)
     }.flowOn(Dispatchers.IO)
 
@@ -238,41 +257,52 @@ class MizanRepositoryImpl(
             preferencesDataSource.setHomeBssid(networkDetails.bssid)
         }
 
-        val calendar = Calendar.getInstance()
-        calendar.set(Calendar.DAY_OF_MONTH, 1)
-        calendar.set(Calendar.HOUR_OF_DAY, 0)
-        calendar.set(Calendar.MINUTE, 0)
-        calendar.set(Calendar.SECOND, 0)
-        val startTime = calendar.timeInMillis
         val endTime = System.currentTimeMillis()
-
-        val (rx, tx) = networkStatsDataSource.queryTotalWifiUsage(startTime, endTime)
+        val currentMonth = monthKey(endTime)
+        val monthStart = monthStart(endTime)
+        val (rx, tx) = networkStatsDataSource.queryTotalWifiUsage(monthStart, endTime)
         val currentTotalWifi = rx + tx
+        val baseline = preferencesDataSource.getWifiBaseline()
 
-        // Delta calculation for home network
+        // A missing or stale baseline is initialized now and contributes zero usage.
+        if (!baseline.initialized || baseline.monthKey != currentMonth) {
+            preferencesDataSource.setWifiBaseline(rx, tx, endTime, currentMonth)
+            return UsageSnapshot(
+                timestamp = endTime,
+                uploadBytes = 0L,
+                downloadBytes = 0L,
+                totalBytes = 0L,
+                consumedGb = 0f,
+                ssid = networkDetails.ssid,
+                isHomeWifi = isHome,
+                appSnapshots = emptyList()
+            )
+        }
+
         val lastKnownTotal = preferencesDataSource.getLastKnownTotalWifiBytes()
-        if (lastKnownTotal > 0L) {
-            val delta = (currentTotalWifi - lastKnownTotal).coerceAtLeast(0L)
-            if (isHome && delta > 0L) {
-                preferencesDataSource.addAccumulatedHomeBytes(delta)
-            }
-        } else {
-            // Initial seed
-            if (isHome) {
-                preferencesDataSource.setAccumulatedHomeBytes(currentTotalWifi)
-            }
+        val delta = (currentTotalWifi - lastKnownTotal).coerceAtLeast(0L)
+        if (isHome && delta > 0L) {
+            preferencesDataSource.addAccumulatedHomeBytes(delta)
         }
         preferencesDataSource.updateLastKnownTotalWifiBytes(currentTotalWifi)
 
-        val topApps = networkStatsDataSource.queryTopAppsUsage(startTime, endTime, limit = 5)
+        val topApps = networkStatsDataSource.queryTopAppsUsage(
+            startTime = baseline.timestamp.coerceAtLeast(monthStart),
+            endTime = endTime,
+            networkType = NetworkCapabilities.TRANSPORT_WIFI,
+            limit = 5
+        )
         val accumulatedBytes = getAccumulatedHomeBytesSync()
-        val consumedGb = UsageSnapshot.bytesToGb(if (accumulatedBytes > 0L) accumulatedBytes else currentTotalWifi)
+        val cumulativeSinceActivation =
+            (rx - baseline.rxBytes).coerceAtLeast(0L) +
+                (tx - baseline.txBytes).coerceAtLeast(0L)
+        val consumedGb = UsageSnapshot.bytesToGb(accumulatedBytes)
 
         val snapshot = UsageSnapshot(
             timestamp = endTime,
-            uploadBytes = tx,
-            downloadBytes = rx,
-            totalBytes = currentTotalWifi,
+            uploadBytes = (tx - baseline.txBytes).coerceAtLeast(0L),
+            downloadBytes = (rx - baseline.rxBytes).coerceAtLeast(0L),
+            totalBytes = cumulativeSinceActivation,
             consumedGb = consumedGb,
             ssid = networkDetails.ssid,
             isHomeWifi = isHome,
@@ -289,6 +319,22 @@ class MizanRepositoryImpl(
 
     private suspend fun getAccumulatedHomeBytesSync(): Long {
         return preferencesDataSource.accumulatedBytesFlow.first()
+    }
+
+    private fun monthStart(timeMillis: Long): Long {
+        return Calendar.getInstance().apply {
+            timeInMillis = timeMillis
+            set(Calendar.DAY_OF_MONTH, 1)
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+    }
+
+    private fun monthKey(timeMillis: Long): String {
+        return Calendar.getInstance().apply { timeInMillis = timeMillis }
+            .let { "${it.get(Calendar.YEAR)}-${it.get(Calendar.MONTH) + 1}" }
     }
 
     private suspend fun getDeviceProfileSync(): DeviceProfile? {

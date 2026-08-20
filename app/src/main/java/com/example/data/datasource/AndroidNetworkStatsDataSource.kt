@@ -70,37 +70,12 @@ class AndroidNetworkStatsDataSource(
     }
 
     /**
-     * Queries total Cellular/Mobile Data byte statistics (Upload & Download).
-     */
-    fun queryTotalCellularUsage(startTime: Long, endTime: Long): Pair<Long, Long> {
-        if (!hasUsageStatsPermission() || networkStatsManager == null) {
-            return Pair(0L, 0L)
-        }
-
-        return try {
-            val bucket = networkStatsManager.querySummaryForDevice(
-                NetworkCapabilities.TRANSPORT_CELLULAR,
-                null,
-                startTime,
-                endTime
-            )
-            val rxBytes = bucket.rxBytes
-            val txBytes = bucket.txBytes
-            Pair(rxBytes, txBytes)
-        } catch (_: SecurityException) {
-            Pair(0L, 0L)
-        } catch (_: Exception) {
-            Pair(0L, 0L)
-        }
-    }
-
-    /**
-     * Queries per-app Wi-Fi & Cellular consumption and returns sorted list of top apps.
+     * Queries per-app Wi-Fi consumption and returns a sorted list of top apps.
      */
     fun queryTopAppsUsage(
         startTime: Long,
         endTime: Long,
-        networkType: Int? = null,
+        networkType: Int = NetworkCapabilities.TRANSPORT_WIFI,
         limit: Int = 20
     ): List<AppUsageItem> {
         if (!hasUsageStatsPermission() || networkStatsManager == null) {
@@ -112,7 +87,7 @@ class AndroidNetworkStatsDataSource(
         val transportTypes = when (networkType) {
             NetworkCapabilities.TRANSPORT_WIFI -> listOf(NetworkCapabilities.TRANSPORT_WIFI)
             NetworkCapabilities.TRANSPORT_CELLULAR -> listOf(NetworkCapabilities.TRANSPORT_CELLULAR)
-            else -> listOf(NetworkCapabilities.TRANSPORT_WIFI, NetworkCapabilities.TRANSPORT_CELLULAR)
+            else -> listOf(NetworkCapabilities.TRANSPORT_WIFI)
         }
 
         for (transport in transportTypes) {
@@ -169,7 +144,7 @@ class AndroidNetworkStatsDataSource(
     /**
      * Queries 7-day usage trend for the last 7 days.
      */
-    fun query7DayTrend(): List<DayUsage> {
+    fun query7DayTrend(startFrom: Long? = null): List<DayUsage> {
         if (!hasUsageStatsPermission() || networkStatsManager == null) {
             return getDefaultTrend()
         }
@@ -190,9 +165,18 @@ class AndroidNetworkStatsDataSource(
             calendar.set(Calendar.SECOND, 0)
             calendar.set(Calendar.MILLISECOND, 0)
             val startOfDay = calendar.timeInMillis
+            val effectiveStart = if (startFrom != null) {
+                maxOf(startOfDay, startFrom)
+            } else {
+                startOfDay
+            }
 
             val dayLabel = getArabicDayLabel(calendar.get(Calendar.DAY_OF_WEEK))
-            val (rx, tx) = queryTotalWifiUsage(startOfDay, endOfDay)
+            val (rx, tx) = if (effectiveStart < endOfDay) {
+                queryTotalWifiUsage(effectiveStart, endOfDay)
+            } else {
+                Pair(0L, 0L)
+            }
             val dayGb = UsageSnapshot.bytesToGb(rx + tx)
 
             trend.add(0, DayUsage(dayLabel = dayLabel, valueGb = dayGb))

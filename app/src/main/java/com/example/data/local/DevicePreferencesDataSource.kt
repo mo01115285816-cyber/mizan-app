@@ -16,6 +16,14 @@ import kotlinx.coroutines.flow.map
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "mizan_settings")
 
+data class WifiBaseline(
+    val rxBytes: Long,
+    val txBytes: Long,
+    val timestamp: Long,
+    val monthKey: String,
+    val initialized: Boolean
+)
+
 class DevicePreferencesDataSource(private val context: Context) {
 
     companion object {
@@ -29,6 +37,12 @@ class DevicePreferencesDataSource(private val context: Context) {
         val KEY_CURRENT_USAGE_GB = floatPreferencesKey("current_usage_gb")
         val KEY_ACCUMULATED_HOME_BYTES = longPreferencesKey("accumulated_home_bytes")
         val KEY_LAST_KNOWN_TOTAL_WIFI_BYTES = longPreferencesKey("last_known_total_wifi_bytes")
+        val KEY_WIFI_BASELINE_BYTES = longPreferencesKey("wifi_baseline_bytes")
+        val KEY_WIFI_BASELINE_RX_BYTES = longPreferencesKey("wifi_baseline_rx_bytes")
+        val KEY_WIFI_BASELINE_TX_BYTES = longPreferencesKey("wifi_baseline_tx_bytes")
+        val KEY_WIFI_BASELINE_TIME = longPreferencesKey("wifi_baseline_time")
+        val KEY_WIFI_BASELINE_MONTH = stringPreferencesKey("wifi_baseline_month")
+        val KEY_WIFI_BASELINE_INITIALIZED = booleanPreferencesKey("wifi_baseline_initialized")
         val KEY_LAST_SYNC_TIME = longPreferencesKey("last_sync_time")
         val KEY_IS_BLOCKED = booleanPreferencesKey("is_blocked")
         val KEY_IS_VPN_CONSENT_GRANTED = booleanPreferencesKey("is_vpn_consent_granted")
@@ -190,6 +204,49 @@ class DevicePreferencesDataSource(private val context: Context) {
 
     suspend fun getLastKnownTotalWifiBytes(): Long {
         return context.dataStore.data.first()[KEY_LAST_KNOWN_TOTAL_WIFI_BYTES] ?: 0L
+    }
+
+    suspend fun setWifiBaseline(rxBytes: Long, txBytes: Long, timestamp: Long, monthKey: String) {
+        val safeRx = rxBytes.coerceAtLeast(0L)
+        val safeTx = txBytes.coerceAtLeast(0L)
+        context.dataStore.edit { preferences ->
+            preferences[KEY_WIFI_BASELINE_RX_BYTES] = safeRx
+            preferences[KEY_WIFI_BASELINE_TX_BYTES] = safeTx
+            preferences[KEY_WIFI_BASELINE_BYTES] = safeRx + safeTx
+            preferences[KEY_WIFI_BASELINE_TIME] = timestamp
+            preferences[KEY_WIFI_BASELINE_MONTH] = monthKey
+            preferences[KEY_WIFI_BASELINE_INITIALIZED] = true
+            preferences[KEY_ACCUMULATED_HOME_BYTES] = 0L
+            preferences[KEY_LAST_KNOWN_TOTAL_WIFI_BYTES] = safeRx + safeTx
+        }
+    }
+
+    suspend fun getWifiBaseline(): WifiBaseline {
+        val preferences = context.dataStore.data.first()
+        return WifiBaseline(
+            rxBytes = preferences[KEY_WIFI_BASELINE_RX_BYTES] ?: 0L,
+            txBytes = preferences[KEY_WIFI_BASELINE_TX_BYTES] ?: 0L,
+            timestamp = preferences[KEY_WIFI_BASELINE_TIME] ?: 0L,
+            monthKey = preferences[KEY_WIFI_BASELINE_MONTH] ?: "",
+            initialized = preferences[KEY_WIFI_BASELINE_INITIALIZED] ?: false
+        )
+    }
+
+    suspend fun isWifiBaselineInitialized(): Boolean {
+        return context.dataStore.data.first()[KEY_WIFI_BASELINE_INITIALIZED] ?: false
+    }
+
+    suspend fun resetWifiUsageBaseline() {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_WIFI_BASELINE_RX_BYTES] = 0L
+            preferences[KEY_WIFI_BASELINE_TX_BYTES] = 0L
+            preferences[KEY_WIFI_BASELINE_BYTES] = 0L
+            preferences[KEY_WIFI_BASELINE_TIME] = 0L
+            preferences[KEY_WIFI_BASELINE_MONTH] = ""
+            preferences[KEY_WIFI_BASELINE_INITIALIZED] = false
+            preferences[KEY_ACCUMULATED_HOME_BYTES] = 0L
+            preferences[KEY_LAST_KNOWN_TOTAL_WIFI_BYTES] = 0L
+        }
     }
 
     suspend fun clear() {

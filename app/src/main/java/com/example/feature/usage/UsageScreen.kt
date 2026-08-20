@@ -24,7 +24,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.CellTower
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Search
@@ -62,6 +61,7 @@ import com.example.core.designsystem.fluidPressEffect
 import com.example.core.model.AppUsageItem
 import com.example.core.model.UsageSnapshot
 import com.example.data.datasource.AndroidNetworkStatsDataSource
+import com.example.data.local.DevicePreferencesDataSource
 import com.example.feature.home.DayUsage
 import com.example.feature.home.components.MizanTopCapsulesBar
 import java.util.Calendar
@@ -88,6 +88,7 @@ fun UsageScreen(
 ) {
     val context = LocalContext.current
     val dataSource = remember { AndroidNetworkStatsDataSource(context) }
+    val preferencesDataSource = remember { DevicePreferencesDataSource(context) }
 
     var selectedPeriod by remember { mutableStateOf(UsagePeriod.Week) }
     var selectedDayIndex by remember { mutableStateOf<Int?>(null) }
@@ -95,15 +96,16 @@ fun UsageScreen(
     var showSearchBar by remember { mutableStateOf(false) }
 
     var wifiUsageGb by remember { mutableStateOf(0f) }
-    var mobileUsageGb by remember { mutableStateOf(0f) }
     var trendList by remember { mutableStateOf<List<DayUsage>>(emptyList()) }
     var appsList by remember { mutableStateOf<List<AppUsageItem>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
+    var reloadToken by remember { mutableStateOf(0) }
 
-    fun loadDataForPeriod(period: UsagePeriod) {
+    suspend fun loadDataForPeriod(period: UsagePeriod) {
         isLoading = true
         val cal = Calendar.getInstance()
         val endTime = cal.timeInMillis
+        val currentMonthKey = "${cal.get(Calendar.YEAR)}-${cal.get(Calendar.MONTH) + 1}"
 
         val startTime = when (period) {
             UsagePeriod.Today -> {
@@ -127,16 +129,32 @@ fun UsageScreen(
             }
         }
 
-        val (wifiRx, wifiTx) = dataSource.queryTotalWifiUsage(startTime, endTime)
-        val (cellRx, cellTx) = dataSource.queryTotalCellularUsage(startTime, endTime)
+        val baseline = preferencesDataSource.getWifiBaseline()
+        val baselineIsCurrent = baseline.initialized && baseline.monthKey == currentMonthKey
+        val effectiveStart = if (baselineIsCurrent) maxOf(startTime, baseline.timestamp) else endTime
+        val (wifiRx, wifiTx) = if (effectiveStart < endTime) {
+            dataSource.queryTotalWifiUsage(effectiveStart, endTime)
+        } else {
+            Pair(0L, 0L)
+        }
         wifiUsageGb = UsageSnapshot.bytesToGb(wifiRx + wifiTx)
-        mobileUsageGb = UsageSnapshot.bytesToGb(cellRx + cellTx)
-        trendList = dataSource.query7DayTrend()
-        appsList = dataSource.queryTopAppsUsage(startTime, endTime, limit = 25)
+        trendList = dataSource.query7DayTrend(
+            startFrom = if (baselineIsCurrent) baseline.timestamp else endTime
+        )
+        appsList = if (effectiveStart < endTime) {
+            dataSource.queryTopAppsUsage(
+                startTime = effectiveStart,
+                endTime = endTime,
+                networkType = android.net.NetworkCapabilities.TRANSPORT_WIFI,
+                limit = 25
+            )
+        } else {
+            emptyList()
+        }
         isLoading = false
     }
 
-    LaunchedEffect(selectedPeriod) {
+    LaunchedEffect(selectedPeriod, reloadToken) {
         loadDataForPeriod(selectedPeriod)
     }
 
@@ -148,7 +166,7 @@ fun UsageScreen(
         }
     }
 
-    val totalUsageGb = wifiUsageGb + mobileUsageGb
+    val totalUsageGb = wifiUsageGb
 
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         Box(
@@ -201,13 +219,9 @@ fun UsageScreen(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                // 1. Network Split Card (Wi-Fi vs Mobile)
+                // 1. Wi-Fi usage since device activation
                 item {
-                    NetworkSplitCard(
-                        wifiGb = wifiUsageGb,
-                        cellularGb = mobileUsageGb,
-                        totalGb = totalUsageGb
-                    )
+                    NetworkSplitCard(totalGb = totalUsageGb)
                 }
 
                 // 2. Interactive Usage Chart
@@ -289,7 +303,7 @@ fun UsageScreen(
                 onSearchActiveChange = { showSearchBar = it },
                 searchPlaceholder = "ابحث عن تطبيق...",
                 onRefreshClick = {
-                    loadDataForPeriod(selectedPeriod)
+                    reloadToken += 1
                     onRefresh()
                 }
             )
@@ -299,12 +313,8 @@ fun UsageScreen(
 
 @Composable
 private fun NetworkSplitCard(
-    wifiGb: Float,
-    cellularGb: Float,
     totalGb: Float
 ) {
-    val wifiRatio = if (totalGb > 0f) wifiGb / totalGb else 0.5f
-
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -319,12 +329,12 @@ private fun NetworkSplitCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "توزيع شبكات البيانات",
+                text = "استهلاك Wi‑Fi منذ التفعيل",
                 style = MizanTypography.Title,
                 color = MizanColors.Charcoal
             )
             Text(
-                text = "الإجمالي: ${String.format(java.util.Locale.US, "%.2f", totalGb)} GB",
+                text = "${String.format(java.util.Locale.US, "%.2f", totalGb)} GB",
                 style = MizanTypography.BodyMedium,
                 fontWeight = FontWeight.Bold,
                 color = MizanColors.Charcoal
@@ -332,9 +342,7 @@ private fun NetworkSplitCard(
         }
 
         Spacer(modifier = Modifier.height(14.dp))
-
-        // Dual Color Progress Bar
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(12.dp)
@@ -343,68 +351,38 @@ private fun NetworkSplitCard(
         ) {
             Box(
                 modifier = Modifier
-                    .weight(max(wifiRatio, 0.01f))
-                    .fillMaxSize()
+                    .fillMaxWidth()
+                    .height(12.dp)
+                    .clip(RoundedCornerShape(6.dp))
                     .background(MizanColors.Lime)
-            )
-            Box(
-                modifier = Modifier
-                    .weight(max(1f - wifiRatio, 0.01f))
-                    .fillMaxSize()
-                    .background(MizanColors.Charcoal)
             )
         }
 
-        Spacer(modifier = Modifier.height(14.dp))
-
-        // Stats Labels
+        Spacer(modifier = Modifier.height(12.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(10.dp)
-                        .clip(CircleShape)
-                        .background(MizanColors.Lime)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
                 Icon(
                     imageVector = Icons.Outlined.Wifi,
                     contentDescription = null,
                     tint = MizanColors.Charcoal,
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = "واي فاي: ${String.format(java.util.Locale.US, "%.2f", wifiGb)} GB",
-                    style = MizanTypography.Label,
-                    color = MizanColors.Charcoal
-                )
-            }
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(10.dp)
-                        .clip(CircleShape)
-                        .background(MizanColors.Charcoal)
+                    modifier = Modifier.size(17.dp)
                 )
                 Spacer(modifier = Modifier.width(6.dp))
-                Icon(
-                    imageVector = Icons.Outlined.CellTower,
-                    contentDescription = null,
-                    tint = MizanColors.Charcoal,
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
                 Text(
-                    text = "بيانات الجوال: ${String.format(java.util.Locale.US, "%.2f", cellularGb)} GB",
+                    text = "Wi‑Fi فقط",
                     style = MizanTypography.Label,
                     color = MizanColors.Charcoal
                 )
             }
+            Text(
+                text = "بيانات الجوال غير محسوبة",
+                style = MizanTypography.Label,
+                color = MizanColors.MutedGray
+            )
         }
     }
 }
