@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
+import java.security.MessageDigest
 import java.util.Calendar
 import kotlin.math.max
 
@@ -32,6 +33,9 @@ class MizanRepositoryImpl(
     val authRepository: SupabaseAuthRepository = SupabaseAuthRepository(context),
     private val supabaseDataSource: SupabaseDeviceDataSource = SupabaseDeviceDataSource(authRepository)
 ) : QuotaRepository, UsageStatsRepository, DeviceProfileRepository {
+
+    val lastDeviceUpsertStatus: Int?
+        get() = supabaseDataSource.lastDeviceUpsertStatus
 
     private val scope = CoroutineScope(Dispatchers.IO)
 
@@ -407,6 +411,17 @@ class MizanRepositoryImpl(
             } catch (_: Exception) {
                 "android_${System.currentTimeMillis()}"
             }
+        }
+
+        /**
+         * Keeps the physical Android identifier private to the account namespace.
+         * This prevents a reused phone from colliding with a device row owned by
+         * another Supabase user while remaining stable for the same account.
+         */
+        fun getAccountScopedDeviceKey(context: Context, userId: String): String {
+            val source = "${getAndroidId(context)}:$userId"
+            val digest = MessageDigest.getInstance("SHA-256").digest(source.toByteArray(Charsets.UTF_8))
+            return digest.take(16).joinToString("") { "%02x".format(it) }
         }
     }
 }

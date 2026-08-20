@@ -42,6 +42,10 @@ class SupabaseDeviceDataSource(
     private val tag = "SupabaseDataSource"
     private val scope = CoroutineScope(Dispatchers.IO + Job())
 
+    @Volatile
+    var lastDeviceUpsertStatus: Int? = null
+        private set
+
     private val _realtimePolicyUpdates = MutableSharedFlow<QuotaPolicy>(extraBufferCapacity = 10)
     val realtimePolicyUpdates: SharedFlow<QuotaPolicy> = _realtimePolicyUpdates.asSharedFlow()
     private val _realtimeTargetSsidUpdates = MutableSharedFlow<String>(extraBufferCapacity = 10)
@@ -100,7 +104,14 @@ class SupabaseDeviceDataSource(
      * Upserts device profile into Supabase 'devices' table.
      */
     suspend fun upsertDevice(profile: DeviceProfile, includePolicyFields: Boolean = true): Boolean = withContext(Dispatchers.IO) {
+        lastDeviceUpsertStatus = null
         if (!isConfigured) return@withContext false
+        val sessionToken = authRepository?.getValidAccessToken()
+        if (authRepository != null && sessionToken.isNullOrBlank()) {
+            lastDeviceUpsertStatus = 401
+            Log.w(tag, "Device upsert skipped because the Supabase session is missing or expired")
+            return@withContext false
+        }
 
         try {
             val nowIso = getIso8601Timestamp()
@@ -124,7 +135,7 @@ class SupabaseDeviceDataSource(
                 put("updated_at", nowIso)
             }
 
-            val bearer = getAuthBearerToken()
+            val bearer = sessionToken ?: anonKey
             val requestBody = json.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
             val request = Request.Builder()
                 .url("$supabaseUrl/rest/v1/devices?on_conflict=device_key")
@@ -136,11 +147,16 @@ class SupabaseDeviceDataSource(
                 .build()
 
             val response: Response = client.newCall(request).execute()
-            val successful = response.isSuccessful
-            response.close()
-            successful
+            response.use {
+                lastDeviceUpsertStatus = it.code
+                if (!it.isSuccessful) {
+                    Log.w(tag, "Device upsert rejected by Supabase: HTTP ${it.code}")
+                }
+                it.isSuccessful
+            }
         } catch (e: Exception) {
             Log.w(tag, "Failed to upsert device to Supabase: ${e.message}")
+            lastDeviceUpsertStatus = 0
             false
         }
     }

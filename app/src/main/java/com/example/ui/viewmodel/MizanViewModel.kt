@@ -188,7 +188,7 @@ class MizanViewModel(
         _appState.value = AppState.DeviceLinking
         val userId = repository.authRepository.getUserId() ?: return
 
-        val deviceId = MizanRepositoryImpl.getAndroidId(context)
+        val deviceId = MizanRepositoryImpl.getAccountScopedDeviceKey(context, userId)
         val model = Build.MODEL ?: "Android Device"
         val manufacturer = Build.MANUFACTURER ?: "Unknown"
         val osVersion = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})"
@@ -219,7 +219,14 @@ class MizanViewModel(
             UsageTrackingService.start(context)
             refreshUsage()
         } else {
-            _appState.value = AppState.NetworkError("فشل في ربط الجهاز بخوادم Mizan")
+            val status = repository.lastDeviceUpsertStatus
+            val message = when (status) {
+                401, 403 -> "انتهت جلسة الدخول أو لا يملك الحساب صلاحية ربط الجهاز. سجّل الدخول مرة أخرى ثم أعد المحاولة"
+                409 -> "هذا الجهاز مرتبط بحساب آخر على خادم Mizan"
+                0 -> "تعذر الوصول إلى خادم Mizan. تحقق من اتصال الإنترنت ثم أعد المحاولة"
+                else -> "رفض خادم Mizan ربط الجهاز${status?.let { " (HTTP $it)" } ?: ""}. أعد المحاولة بعد التأكد من الحساب ورابط الدعوة"
+            }
+            _appState.value = AppState.NetworkError(message)
         }
     }
 
