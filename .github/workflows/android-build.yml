@@ -90,13 +90,14 @@ jobs:
       - name: Build Debug APK from the uploaded source
         run: ./gradlew --no-daemon assembleDebug --stacktrace
 
-      - name: Verify Debug APK output
+      - name: Verify Debug APK output and signing certificate
         shell: bash
         run: |
           found=0
           for apk in app/build/outputs/apk/debug/*.apk; do
             test -s "$apk"
             sha256sum "$apk"
+            "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$apk"
             found=1
           done
           test "$found" = 1
