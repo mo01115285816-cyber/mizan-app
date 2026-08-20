@@ -173,8 +173,7 @@ class MainActivity : ComponentActivity() {
                         } catch (e: NoCredentialException) {
                             Log.w("MainActivity", "No credential from Google ID option; trying explicit Google sign-in", e)
                             try {
-                                val fallbackOption = GetSignInWithGoogleOption.Builder()
-                                    .setServerClientId(serverClientId)
+                                val fallbackOption = GetSignInWithGoogleOption.Builder(serverClientId)
                                     .setNonce(hashedNonce)
                                     .build()
                                 val fallbackRequest = GetCredentialRequest.Builder()
