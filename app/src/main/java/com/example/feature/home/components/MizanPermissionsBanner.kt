@@ -9,15 +9,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.AdminPanelSettings
-import androidx.compose.material.icons.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -43,9 +39,7 @@ fun MizanPermissionsBanner(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    if (permissionsState.grantedCount == permissionsState.totalCount) {
-        return
-    }
+    if (permissionsState.grantedCount == permissionsState.totalCount) return
 
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         Box(
@@ -58,46 +52,49 @@ fun MizanPermissionsBanner(
                 .padding(horizontal = 16.dp, vertical = 14.dp)
                 .testTag("permissions_banner")
         ) {
-            Row(
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Warning / Shield Icon
-                Box(
-                    modifier = Modifier
-                        .size(38.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFFFFB300)),
-                    contentAlignment = Alignment.Center
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Security,
-                        contentDescription = "الصلاحيات",
-                        tint = Color(0xFF151515),
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFFFB300)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Security,
+                            contentDescription = "الصلاحيات",
+                            tint = Color(0xFF151515),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
 
-                Spacer(modifier = Modifier.width(12.dp))
-
-                // Text
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
                         Text(
                             text = "تفعيل صلاحيات النظام",
                             style = TextStyle(
                                 fontFamily = FontFamily.SansSerif,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp,
+                                fontSize = 15.sp,
                                 color = Color(0xFF151515)
-                            )
+                            ),
+                            maxLines = 1
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
                                 .background(Color(0xFF151515))
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                .padding(horizontal = 7.dp, vertical = 3.dp)
                         ) {
                             Text(
                                 text = "${permissionsState.grantedCount} من ${permissionsState.totalCount}",
@@ -106,42 +103,42 @@ fun MizanPermissionsBanner(
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 11.sp,
                                     color = Color(0xFFC0EE2B)
-                                )
+                                ),
+                                maxLines = 1
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(2.dp))
-
-                    Text(
-                        text = "اضغط لمنح إذن قراءة الاستهلاك والواي فاي وحظر الباقة",
-                        style = TextStyle(
-                            fontFamily = FontFamily.SansSerif,
-                            fontSize = 12.sp,
-                            color = Color(0xFF5D4037)
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(Color(0xFF151515))
+                            .padding(horizontal = 12.dp, vertical = 7.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "إكمال",
+                            style = TextStyle(
+                                fontFamily = FontFamily.SansSerif,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                color = Color.White
+                            ),
+                            maxLines = 1
                         )
-                    )
+                    }
                 }
 
-                Spacer(modifier = Modifier.width(8.dp))
-
-                // Action Pill
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(Color(0xFF151515))
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                ) {
-                    Text(
-                        text = "إكمال",
-                        style = TextStyle(
-                            fontFamily = FontFamily.SansSerif,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
-                            color = Color.White
-                        )
-                    )
-                }
+                Text(
+                    text = "اضغط لمنح إذن قراءة الاستهلاك والواي فاي وحظر الباقة",
+                    style = TextStyle(
+                        fontFamily = FontFamily.SansSerif,
+                        fontSize = 12.sp,
+                        color = Color(0xFF5D4037)
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                    maxLines = 2
+                )
             }
         }
     }

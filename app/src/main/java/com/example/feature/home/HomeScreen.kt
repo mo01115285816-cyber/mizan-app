@@ -109,75 +109,60 @@ fun HomeScreen(
     onRequestBatteryOptimization: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
-        containerColor = MizanColors.Paper,
-        bottomBar = {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .padding(horizontal = 14.dp, vertical = 8.dp)
-            ) {
-                MizanHomeBottomBar(
-                    selectedTab = state.selectedTab,
-                    onTabSelected = onTabSelected
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MizanColors.Paper)
+    ) {
+        AnimatedContent(
+            modifier = Modifier.fillMaxSize(),
+            targetState = state.selectedTab,
+            transitionSpec = {
+                fadeIn(animationSpec = tween(120)) togetherWith fadeOut(animationSpec = tween(90))
+            },
+            label = "home_tab_transition"
+        ) { tab ->
+            when (tab) {
+                HomeTab.Home -> HomeDashboardContent(
+                    state = state,
+                    onWifiStatusClick = onWifiStatusClick,
+                    onProfileClick = onProfileClick,
+                    onOpenPermissionsHub = onOpenPermissionsHub,
+                    onConnectionPillClick = onConnectionPillClick,
+                    onRefresh = onRefreshNetworkDetails
+                )
+                HomeTab.Usage -> UsageScreen(onRefresh = onRefreshNetworkDetails)
+                HomeTab.Account -> AccountScreen(
+                    userName = state.userName,
+                    userEmail = state.userEmail,
+                    userPhotoUrl = state.userPhotoUrl,
+                    householdId = state.householdId,
+                    deviceModel = state.deviceModel,
+                    isVpnEnabled = state.isVpnConsentGranted,
+                    isDeviceAdminEnabled = state.isDeviceAdminActive,
+                    permissionsState = state.permissionsState,
+                    onToggleVpnConsent = onToggleVpnConsent,
+                    onToggleDeviceAdmin = onToggleDeviceAdmin,
+                    onOpenPermissionsHub = onOpenPermissionsHub,
+                    onSyncNow = onRefreshNetworkDetails,
+                    onSignOut = onSignOutClick
                 )
             }
         }
-    ) { innerPadding ->
+
         Box(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 14.dp, vertical = 10.dp)
         ) {
-            AnimatedContent(
-                targetState = state.selectedTab,
-                transitionSpec = {
-                    fadeIn(animationSpec = tween(220)) togetherWith fadeOut(animationSpec = tween(180))
-                },
-                label = "home_tab_transition"
-            ) { tab ->
-                when (tab) {
-                    HomeTab.Home -> {
-                        HomeDashboardContent(
-                            state = state,
-                            onWifiStatusClick = onWifiStatusClick,
-                            onProfileClick = onProfileClick,
-                            onOpenPermissionsHub = onOpenPermissionsHub,
-                            onConnectionPillClick = onConnectionPillClick,
-                            onRefresh = onRefreshNetworkDetails
-                        )
-                    }
-                    HomeTab.Usage -> {
-                        UsageScreen(
-                            onRefresh = onRefreshNetworkDetails
-                        )
-                    }
-                    HomeTab.Account -> {
-                        AccountScreen(
-                            userName = state.userName,
-                            userEmail = state.userEmail,
-                            userPhotoUrl = state.userPhotoUrl,
-                            householdId = state.householdId,
-                            deviceModel = state.deviceModel,
-                            isVpnEnabled = state.isVpnConsentGranted,
-                            isDeviceAdminEnabled = state.isDeviceAdminActive,
-                            permissionsState = state.permissionsState,
-                            onToggleVpnConsent = onToggleVpnConsent,
-                            onToggleDeviceAdmin = onToggleDeviceAdmin,
-                            onOpenPermissionsHub = onOpenPermissionsHub,
-                            onSyncNow = onRefreshNetworkDetails,
-                            onSignOut = onSignOutClick
-                        )
-                    }
-                }
-            }
+            MizanHomeBottomBar(
+                selectedTab = state.selectedTab,
+                onTabSelected = onTabSelected
+            )
         }
 
-        // -------------------------------------------------------------
-        // Profile Bottom Sheet
-        // -------------------------------------------------------------
         if (state.showProfileSheet) {
             MizanProfileBottomSheet(
                 userName = state.userName,
@@ -191,9 +176,6 @@ fun HomeScreen(
             )
         }
 
-        // -------------------------------------------------------------
-        // Network Details Bottom Sheet
-        // -------------------------------------------------------------
         if (state.showNetworkDetailsSheet) {
             MizanNetworkDetailsBottomSheet(
                 networkDetails = state.networkDetails,
@@ -202,9 +184,6 @@ fun HomeScreen(
             )
         }
 
-        // -------------------------------------------------------------
-        // Permissions Hub Bottom Sheet
-        // -------------------------------------------------------------
         if (state.showPermissionsSheet) {
             PermissionsHubBottomSheet(
                 permissionsState = state.permissionsState,

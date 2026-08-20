@@ -9,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -46,14 +47,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.util.Locale
 
-/**
- * Large Mint / Lime Quota Hero Card.
- * Displays:
- * 1. 64% circular usage ring on the left
- * 2. 85.3 GB, total quota subtitle, dotted divider, and 48.0 GB remaining on the right
- * 3. Interactive Charcoal status pill displaying the dynamic connected network name
- */
 @Composable
 fun MizanQuotaHeroCard(
     usedGb: Float,
@@ -63,210 +58,261 @@ fun MizanQuotaHeroCard(
     connectionStatus: String,
     onConnectionPillClick: () -> Unit = {},
     modifier: Modifier = Modifier,
-    backgroundColor: Color = Color(0xFFEAF7CD) // Soothing mint-lime background
+    backgroundColor: Color = Color(0xFFEAF7CD)
 ) {
-    Box(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(32.dp))
             .background(backgroundColor)
-            .padding(horizontal = 20.dp, vertical = 22.dp)
+            .padding(horizontal = 18.dp, vertical = 20.dp)
             .testTag("mizan_quota_hero_card")
     ) {
+        val compact = maxWidth < 380.dp
+        val ringSize = if (compact) 116.dp else 132.dp
+        val numberSize = if (compact) 32.sp else 38.sp
+
         Column(
             modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Main Top Row: Left = Ring, Right = Stats
-            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Left: Circular Usage Ring
-                    MizanHeroUsageRing(
-                        percentage = percentage,
-                        size = 145.dp,
-                        strokeWidth = 14.dp,
-                        modifier = Modifier.padding(start = 4.dp)
-                    )
-
-                    // Right: Arabic Quota Stats Block
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(start = 16.dp, end = 4.dp),
-                        horizontalAlignment = Alignment.End
+            if (compact) {
+                MizanHeroUsageRing(
+                    percentage = percentage,
+                    size = ringSize,
+                    strokeWidth = 12.dp
+                )
+                Spacer(modifier = Modifier.height(18.dp))
+                QuotaStats(
+                    usedGb = usedGb,
+                    quotaGb = quotaGb,
+                    remainingGb = remainingGb,
+                    numberSize = numberSize,
+                    compact = true
+                )
+            } else {
+                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(18.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // 85.3 GB
-                        Row(
-                            verticalAlignment = Alignment.Bottom,
-                            horizontalArrangement = Arrangement.End
-                        ) {
-                            Text(
-                                text = "GB",
-                                style = TextStyle(
-                                    fontFamily = FontFamily.SansSerif,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 19.sp,
-                                    color = Color(0xFF151515)
-                                ),
-                                modifier = Modifier.padding(bottom = 4.dp, end = 4.dp)
-                            )
-                            Text(
-                                text = String.format(java.util.Locale.US, "%.3f", usedGb),
-                                style = TextStyle(
-                                    fontFamily = FontFamily.SansSerif,
-                                    fontWeight = FontWeight.Black,
-                                    fontSize = 38.sp,
-                                    color = Color(0xFF151515)
-                                )
-                            )
-                        }
-
-                        // من أصل 133.3 ج.ب
-                        Text(
-                            text = "من أصل $quotaGb ج.ب",
-                            style = TextStyle(
-                                fontFamily = FontFamily.SansSerif,
-                                fontWeight = FontWeight.Normal,
-                                fontSize = 15.sp,
-                                color = Color(0xFF6F7368),
-                                textAlign = TextAlign.End
-                            ),
-                            modifier = Modifier.padding(top = 2.dp)
+                        MizanHeroUsageRing(
+                            percentage = percentage,
+                            size = ringSize,
+                            strokeWidth = 14.dp
                         )
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        // Dotted Divider Line
-                        Canvas(
-                            modifier = Modifier
-                                .fillMaxWidth(0.85f)
-                                .height(2.dp)
-                        ) {
-                            val pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 8f), 0f)
-                            drawLine(
-                                color = Color(0xFFCDDFAD),
-                                start = Offset(0f, size.height / 2),
-                                end = Offset(size.width, size.height / 2),
-                                strokeWidth = 2.dp.toPx(),
-                                pathEffect = pathEffect,
-                                cap = StrokeCap.Round
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        // متبقي
-                        Text(
-                            text = "متبقي",
-                            style = TextStyle(
-                                fontFamily = FontFamily.SansSerif,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 15.sp,
-                                color = Color(0xFF151515),
-                                textAlign = TextAlign.End
-                            )
+                        QuotaStats(
+                            usedGb = usedGb,
+                            quotaGb = quotaGb,
+                            remainingGb = remainingGb,
+                            numberSize = numberSize,
+                            compact = false,
+                            modifier = Modifier.weight(1f)
                         )
-
-                        // 48.0 GB
-                        Row(
-                            verticalAlignment = Alignment.Bottom,
-                            horizontalArrangement = Arrangement.End
-                        ) {
-                            Text(
-                                text = "GB",
-                                style = TextStyle(
-                                    fontFamily = FontFamily.SansSerif,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 17.sp,
-                                    color = Color(0xFF3F7E16)
-                                ),
-                                modifier = Modifier.padding(bottom = 2.dp, end = 4.dp)
-                            )
-                            Text(
-                                text = String.format(java.util.Locale.US, "%.3f", remainingGb),
-                                style = TextStyle(
-                                    fontFamily = FontFamily.SansSerif,
-                                    fontWeight = FontWeight.Black,
-                                    fontSize = 25.sp,
-                                    color = Color(0xFF3F7E16)
-                                )
-                            )
-                        }
                     }
                 }
             }
 
             Spacer(modifier = Modifier.height(18.dp))
+            ConnectionStatusPill(
+                connectionStatus = connectionStatus,
+                onClick = onConnectionPillClick
+            )
+        }
+    }
+}
 
-            // Bottom Center Interactive Status Pill
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(22.dp))
-                    .background(Color(0xFF151515))
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = onConnectionPillClick
-                    )
-                    .padding(horizontal = 18.dp, vertical = 9.dp)
-                    .testTag("mizan_connection_status_pill"),
-                contentAlignment = Alignment.Center
+@Composable
+private fun QuotaStats(
+    usedGb: Float,
+    quotaGb: Float,
+    remainingGb: Float,
+    numberSize: androidx.compose.ui.unit.TextUnit,
+    compact: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val valueColor = Color(0xFF151515)
+    val remainingColor = Color(0xFF3F7E16)
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.End
+    ) {
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.End
             ) {
-                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        // Green Home / Wi-Fi icon
-                        Box(
-                            modifier = Modifier
-                                .size(22.dp)
-                                .clip(RoundedCornerShape(6.dp))
-                                .border(1.2.dp, Color(0xFFD6F355), RoundedCornerShape(6.dp)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.Home,
-                                contentDescription = null,
-                                tint = Color(0xFFD6F355),
-                                modifier = Modifier.size(15.dp)
-                            )
-                        }
+                Text(
+                    text = "GB",
+                    style = TextStyle(
+                        fontFamily = FontFamily.SansSerif,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = if (compact) 17.sp else 19.sp,
+                        color = valueColor
+                    ),
+                    modifier = Modifier.padding(bottom = 3.dp, end = 5.dp),
+                    maxLines = 1
+                )
+                Text(
+                    text = formatGb(usedGb),
+                    style = TextStyle(
+                        fontFamily = FontFamily.SansSerif,
+                        fontWeight = FontWeight.Black,
+                        fontSize = numberSize,
+                        color = valueColor
+                    ),
+                    maxLines = 1,
+                    softWrap = false
+                )
+            }
+        }
 
-                        Spacer(modifier = Modifier.width(9.dp))
+        Text(
+            text = "من أصل ${formatGb(quotaGb)} جيجابايت",
+            style = TextStyle(
+                fontFamily = FontFamily.SansSerif,
+                fontWeight = FontWeight.Normal,
+                fontSize = if (compact) 14.sp else 15.sp,
+                color = Color(0xFF6F7368),
+                textAlign = TextAlign.End
+            ),
+            modifier = Modifier.fillMaxWidth(),
+            maxLines = 1,
+            softWrap = false
+        )
 
-                        Text(
-                            text = connectionStatus,
-                            style = TextStyle(
-                                fontFamily = FontFamily.SansSerif,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp,
-                                color = Color.White
-                            )
-                        )
+        Spacer(modifier = Modifier.height(if (compact) 8.dp else 10.dp))
+        Canvas(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(2.dp)
+        ) {
+            drawLine(
+                color = Color(0xFFCDDFAD),
+                start = Offset.Zero.copy(y = size.height / 2),
+                end = Offset(size.width, size.height / 2),
+                strokeWidth = 2.dp.toPx(),
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 8f), 0f),
+                cap = StrokeCap.Round
+            )
+        }
 
-                        Spacer(modifier = Modifier.width(6.dp))
+        Spacer(modifier = Modifier.height(if (compact) 8.dp else 10.dp))
+        Text(
+            text = "متبقي",
+            style = TextStyle(
+                fontFamily = FontFamily.SansSerif,
+                fontWeight = FontWeight.Bold,
+                fontSize = if (compact) 14.sp else 15.sp,
+                color = valueColor,
+                textAlign = TextAlign.End
+            ),
+            modifier = Modifier.fillMaxWidth(),
+            maxLines = 1
+        )
 
-                        Icon(
-                            imageVector = Icons.Outlined.ChevronLeft,
-                            contentDescription = "عرض التفاصيل",
-                            tint = Color(0xFFB0B4A8),
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                }
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.End
+            ) {
+                Text(
+                    text = "GB",
+                    style = TextStyle(
+                        fontFamily = FontFamily.SansSerif,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = if (compact) 16.sp else 17.sp,
+                        color = remainingColor
+                    ),
+                    modifier = Modifier.padding(bottom = 2.dp, end = 5.dp),
+                    maxLines = 1
+                )
+                Text(
+                    text = formatGb(remainingGb),
+                    style = TextStyle(
+                        fontFamily = FontFamily.SansSerif,
+                        fontWeight = FontWeight.Black,
+                        fontSize = if (compact) 24.sp else 27.sp,
+                        color = remainingColor
+                    ),
+                    maxLines = 1,
+                    softWrap = false
+                )
             }
         }
     }
 }
 
-/**
- * Custom Usage Ring with Animated Progress and bold center percentage.
- */
+@Composable
+private fun ConnectionStatusPill(
+    connectionStatus: String,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(22.dp))
+            .background(Color(0xFF151515))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            )
+            .padding(horizontal = 14.dp, vertical = 9.dp)
+            .testTag("mizan_connection_status_pill"),
+        contentAlignment = Alignment.Center
+    ) {
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(22.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .border(1.2.dp, Color(0xFFD6F355), RoundedCornerShape(6.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Home,
+                        contentDescription = null,
+                        tint = Color(0xFFD6F355),
+                        modifier = Modifier.size(15.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = connectionStatus,
+                    style = TextStyle(
+                        fontFamily = FontFamily.SansSerif,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        color = Color.White,
+                        textAlign = TextAlign.Center
+                    ),
+                    maxLines = 1,
+                    softWrap = false
+                )
+                Spacer(modifier = Modifier.width(5.dp))
+                Icon(
+                    imageVector = Icons.Outlined.ChevronLeft,
+                    contentDescription = "عرض التفاصيل",
+                    tint = Color(0xFFB0B4A8),
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+    }
+}
+
+private fun formatGb(value: Float): String =
+    String.format(Locale.US, "%.1f", value.coerceAtLeast(0f))
+
 @Composable
 private fun MizanHeroUsageRing(
     percentage: Int,
@@ -276,7 +322,7 @@ private fun MizanHeroUsageRing(
 ) {
     val animatedPercent by animateFloatAsState(
         targetValue = (percentage / 100f).coerceIn(0f, 1f),
-        animationSpec = tween(durationMillis = 900),
+        animationSpec = tween(durationMillis = 500),
         label = "hero_usage_ring"
     )
 
@@ -289,8 +335,6 @@ private fun MizanHeroUsageRing(
             val diameter = this.size.minDimension - stroke
             val topLeft = Offset(stroke / 2, stroke / 2)
             val arcSize = Size(diameter, diameter)
-
-            // Background soft track
             drawArc(
                 color = Color(0xFFDBEFB7),
                 startAngle = 0f,
@@ -300,8 +344,6 @@ private fun MizanHeroUsageRing(
                 size = arcSize,
                 style = Stroke(width = stroke, cap = StrokeCap.Round)
             )
-
-            // Active Green progress arc
             drawArc(
                 color = Color(0xFF86CF1A),
                 startAngle = -90f,
@@ -313,30 +355,33 @@ private fun MizanHeroUsageRing(
             )
         }
 
-        // Percentage text inside ring
-        Row(
-            verticalAlignment = Alignment.Bottom,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Text(
-                text = "$percentage",
-                style = TextStyle(
-                    fontFamily = FontFamily.SansSerif,
-                    fontWeight = FontWeight.Black,
-                    fontSize = 33.sp,
-                    color = Color(0xFF151515)
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+            Row(
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = percentage.coerceIn(0, 100).toString(),
+                    style = TextStyle(
+                        fontFamily = FontFamily.SansSerif,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 31.sp,
+                        color = Color(0xFF151515)
+                    ),
+                    maxLines = 1
                 )
-            )
-            Text(
-                text = "%",
-                style = TextStyle(
-                    fontFamily = FontFamily.SansSerif,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 19.sp,
-                    color = Color(0xFF151515)
-                ),
-                modifier = Modifier.padding(bottom = 3.dp, start = 1.dp)
-            )
+                Text(
+                    text = "%",
+                    style = TextStyle(
+                        fontFamily = FontFamily.SansSerif,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = Color(0xFF151515)
+                    ),
+                    modifier = Modifier.padding(bottom = 3.dp, start = 1.dp),
+                    maxLines = 1
+                )
+            }
         }
     }
 }
