@@ -105,7 +105,7 @@ fun AccountScreen(
                     .fillMaxSize()
                     .padding(horizontal = 12.dp)
                     .widthIn(max = 640.dp)
-                    .align(Alignment.CenterHorizontally),
+                    .align(Alignment.TopCenter),
                 contentPadding = PaddingValues(top = 78.dp, bottom = 96.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
