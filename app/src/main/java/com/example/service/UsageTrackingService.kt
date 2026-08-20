@@ -290,10 +290,4 @@ class UsageTrackingService : Service() {
         manager?.notify(NOTIFICATION_ID, buildTrackingNotification(statusText))
     }
 
-    override fun onDestroy() {
-        trackingLoopJob?.cancel()
-        trackingLoopJob = null
-        serviceJob.cancel()
-        super.onDestroy()
-    }
 }
