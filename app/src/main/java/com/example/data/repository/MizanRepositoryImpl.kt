@@ -75,6 +75,14 @@ class MizanRepositoryImpl(
         if (!remoteSuccess) return false
 
         preferencesDataSource.saveDeviceProfile(profile)
+
+        // First telemetry must not depend on Target SSID or Usage Access.
+        // It is metadata only and is sent immediately after device registration.
+        val firstNetworkDetails = NetworkInfoProvider.getConnectedNetworkDetails(context)
+        if (firstNetworkDetails.isWifi) {
+            supabaseDataSource.syncNetworkTelemetry(profile.deviceKey, firstNetworkDetails)
+        }
+
         val targetSsid = supabaseDataSource.fetchTargetSsid(profile.householdId)
         if (targetSsid != null) preferencesDataSource.setTargetSsid(targetSsid)
 

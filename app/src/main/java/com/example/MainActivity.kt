@@ -7,6 +7,7 @@ import android.net.Uri
 import android.net.VpnService
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -73,7 +74,16 @@ class MainActivity : ComponentActivity() {
                 // 2. Wi-Fi / Location Runtime Permission Launcher
                 val locationPermissionLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.RequestMultiplePermissions(),
-                    onResult = { _ -> viewModel.refreshUsage() }
+                    onResult = { _ ->
+                        viewModel.refreshUsage()
+                        if (PermissionHelper.hasLocationOrWifiPermission(this@MainActivity) &&
+                            !PermissionHelper.isLocationServicesEnabled(this@MainActivity)
+                        ) {
+                            try {
+                                startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+                            } catch (_: Exception) { }
+                        }
+                    }
                 )
 
                 // 3. VPN Consent Activity Result Launcher

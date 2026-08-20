@@ -122,6 +122,22 @@ object PermissionHelper {
         return hasLocationPermission(context) && hasNearbyWifiPermission(context)
     }
 
+    fun isLocationServicesEnabled(context: Context): Boolean {
+        val locationManager = context.applicationContext.getSystemService(Context.LOCATION_SERVICE) as? android.location.LocationManager
+            ?: return false
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                locationManager.isLocationEnabled
+            } else {
+                @Suppress("DEPRECATION")
+                locationManager.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER) ||
+                    locationManager.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER)
+            }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     fun hasNotificationPermission(context: Context): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             ContextCompat.checkSelfPermission(

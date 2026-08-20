@@ -54,6 +54,7 @@ object NetworkInfoProvider {
         var rssi = 0
         var linkSpeed = 0
         var frequency = 0
+        var securityType = ""
 
         if (wifiManager != null && isWifi) {
             val wifiInfo: WifiInfo? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && capabilities != null) {
@@ -68,6 +69,7 @@ object NetworkInfoProvider {
                 rssi = wifiInfo.rssi
                 linkSpeed = wifiInfo.linkSpeed
                 frequency = wifiInfo.frequency
+                securityType = resolveSecurityType(wifiInfo)
             }
         }
 
@@ -126,11 +128,52 @@ object NetworkInfoProvider {
             frequencyGhz = freqGhz,
             ipAddress = realIp,
             gateway = realGateway,
-                            securityType = if (isWifi) "يحدده النظام" else "شبكة محمول",
+            securityType = if (isWifi) securityType else "شبكة محمول",
 
             isMetered = isMetered,
             statusText = statusText
         )
+    }
+
+    private fun resolveSecurityType(wifiInfo: WifiInfo): String {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return ""
+        return try {
+            val value = WifiInfo::class.java.getMethod("getCurrentSecurityType").invoke(wifiInfo) as? Int ?: return ""
+            val labels = listOf(
+                "SECURITY_TYPE_OPEN" to "OPEN",
+                "SECURITY_TYPE_WEP" to "WEP",
+                "SECURITY_TYPE_PSK" to "PSK",
+                "SECURITY_TYPE_EAP" to "EAP",
+                "SECURITY_TYPE_SAE" to "SAE",
+                "SECURITY_TYPE_OWE" to "OWE",
+                "SECURITY_TYPE_WAPI_PSK" to "WAPI-PSK",
+                "SECURITY_TYPE_WAPI_CERT" to "WAPI-CERT",
+                "SECURITY_TYPE_DPP" to "DPP"
+            )
+            labels.firstNotNullOfOrNull { (fieldName, label) ->
+                runCatching {
+                    if (WifiInfo::class.java.getField(fieldName).getInt(null) == value) label else null
+                }.getOrNull()
+            } ?: ""
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
+    fun isLocationServicesEnabled(context: Context): Boolean {
+        val locationManager = context.applicationContext.getSystemService(Context.LOCATION_SERVICE) as? android.location.LocationManager
+            ?: return false
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                locationManager.isLocationEnabled
+            } else {
+                @Suppress("DEPRECATION")
+                locationManager.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER) ||
+                    locationManager.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER)
+            }
+        } catch (_: Exception) {
+            false
+        }
     }
 
     private fun extractRealIp(linkProperties: LinkProperties?): String {
