@@ -86,11 +86,13 @@ class MizanViewModel(
 
             preferences.deviceProfileFlow.collectLatest { profile ->
                 if (profile == null) {
-                    val householdId = repository.authRepository.fetchHouseholdMembership()
-                    if (householdId != null) {
-                        completeDeviceRegistration(householdId)
-                    } else {
-                        _appState.value = AppState.WaitingForInvite
+                    val membership = repository.authRepository.fetchHouseholdMembershipResult()
+                    when {
+                        !membership.requestSucceeded -> {
+                            _appState.value = AppState.NetworkError("تعذر التحقق من عضوية الحساب، حاول مرة أخرى")
+                        }
+                        membership.householdId != null -> completeDeviceRegistration(membership.householdId)
+                        else -> _appState.value = AppState.WaitingForInvite
                     }
                 } else {
                     _homeUiState.update {
@@ -117,6 +119,7 @@ class MizanViewModel(
         displayName: String? = null,
         photoUrl: String? = null
     ) {
+        if (_appState.value is AppState.SigningIn) return
         viewModelScope.launch {
             _appState.value = AppState.SigningIn
             val authResult = repository.authRepository.signInWithGoogleIdToken(
@@ -136,11 +139,13 @@ class MizanViewModel(
                         userPhotoUrl = resolvedPhoto
                     )
                 }
-                val householdId = repository.authRepository.fetchHouseholdMembership()
-                if (householdId != null) {
-                    completeDeviceRegistration(householdId)
-                } else {
-                    _appState.value = AppState.WaitingForInvite
+                val membership = repository.authRepository.fetchHouseholdMembershipResult()
+                when {
+                    !membership.requestSucceeded -> {
+                        _appState.value = AppState.NetworkError("تم تسجيل الحساب، لكن تعذر التحقق من عضويته. اضغط إعادة المحاولة")
+                    }
+                    membership.householdId != null -> completeDeviceRegistration(membership.householdId)
+                    else -> _appState.value = AppState.WaitingForInvite
                 }
             } else {
                 _appState.value = AppState.AuthError(
@@ -165,11 +170,13 @@ class MizanViewModel(
             _appState.value = AppState.JoiningHousehold
             val success = repository.authRepository.acceptInvite(token)
             if (success) {
-                val householdId = repository.authRepository.fetchHouseholdMembership()
-                if (householdId != null) {
-                    completeDeviceRegistration(householdId)
-                } else {
-                    _appState.value = AppState.InviteError("تم قبول الدعوة ولكن فشل العثور على المنزل")
+                val membership = repository.authRepository.fetchHouseholdMembershipResult()
+                when {
+                    !membership.requestSucceeded -> {
+                        _appState.value = AppState.NetworkError("تم قبول الدعوة، لكن تعذر التحقق من عضوية الحساب")
+                    }
+                    membership.householdId != null -> completeDeviceRegistration(membership.householdId)
+                    else -> _appState.value = AppState.InviteError("تم قبول الدعوة ولكن فشل العثور على المنزل")
                 }
             } else {
                 _appState.value = AppState.InviteError("رابط الدعوة غير صالح أو منتهي الصلاحية")
@@ -249,7 +256,7 @@ class MizanViewModel(
 
                 _homeUiState.update { current ->
                     current.copy(
-                        userName = "عضو العائلة",
+                        userName = current.userName.ifBlank { "عضو العائلة" },
                         usedGb = quota.usedGigabytes,
                         quotaGb = quota.totalGigabytes,
                         remainingGb = quota.remainingGigabytes,

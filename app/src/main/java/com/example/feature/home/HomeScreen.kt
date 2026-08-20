@@ -98,7 +98,6 @@ fun HomeScreen(
     onRefreshNetworkDetails: () -> Unit = {},
     onOpenPermissionsHub: () -> Unit = {},
     onDismissPermissionsHub: () -> Unit = {},
-    onUpdateQuotaLimit: (Float) -> Unit = {},
     onToggleVpnConsent: (Boolean) -> Unit = {},
     onToggleDeviceAdmin: (Boolean) -> Unit = {},
     onRequestUsageAccess: () -> Unit = {},
@@ -162,11 +161,9 @@ fun HomeScreen(
                             userPhotoUrl = state.userPhotoUrl,
                             householdId = state.householdId,
                             deviceModel = state.deviceModel,
-                            quotaLimitGb = state.quotaGb,
                             isVpnEnabled = state.isVpnConsentGranted,
                             isDeviceAdminEnabled = state.isDeviceAdminActive,
                             permissionsState = state.permissionsState,
-                            onUpdateQuotaLimit = onUpdateQuotaLimit,
                             onToggleVpnConsent = onToggleVpnConsent,
                             onToggleDeviceAdmin = onToggleDeviceAdmin,
                             onOpenPermissionsHub = onOpenPermissionsHub,
@@ -235,28 +232,16 @@ private fun HomeDashboardContent(
 ) {
     val scrollState = rememberScrollState()
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(scrollState)
-            .padding(horizontal = 16.dp)
-            .padding(bottom = 80.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        // ---------------------------------------------------------
-        // 1. Floating Top Capsules Bar (Brand Capsule + Actions Capsule)
-        // ---------------------------------------------------------
-        MizanTopCapsulesBar(
-            brandTitle = "ميزان",
-            brandSubtitle = if (state.userName.isNotBlank()) state.userName else null,
-            onWifiClick = onWifiStatusClick,
-            isWifiConnected = state.networkDetails.isWifi && state.networkDetails.isConnected,
-            onRefreshClick = onRefresh,
-            onProfileClick = onProfileClick,
-            userPhotoUrl = state.userPhotoUrl
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(scrollState)
+                .padding(horizontal = 16.dp)
+                .padding(top = 72.dp, bottom = 96.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Spacer(modifier = Modifier.height(8.dp))
 
         // ---------------------------------------------------------
         // Permissions Banner (Appears if any essential permission is missing)
@@ -315,9 +300,21 @@ private fun HomeDashboardContent(
         // ---------------------------------------------------------
         // 5. White Ranked App Usage Card
         // ---------------------------------------------------------
-        MizanTopAppsCard(
-            apps = state.appUsage,
-            modifier = Modifier.fillMaxWidth()
+            MizanTopAppsCard(
+                apps = state.appUsage,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+
+        MizanTopCapsulesBar(
+            modifier = Modifier.align(Alignment.TopCenter),
+            brandTitle = "ميزان",
+            brandSubtitle = if (state.userName.isNotBlank()) state.userName else null,
+            onWifiClick = onWifiStatusClick,
+            isWifiConnected = state.networkDetails.isWifi && state.networkDetails.isConnected,
+            onRefreshClick = onRefresh,
+            onProfileClick = onProfileClick,
+            userPhotoUrl = state.userPhotoUrl
         )
     }
 }

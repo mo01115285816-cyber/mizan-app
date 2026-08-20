@@ -58,20 +58,23 @@ class MizanRepositoryImpl(
     }
 
     override suspend fun saveDeviceProfile(profile: DeviceProfile): Boolean {
-        // Attempt remote registration first
+        // The device must be accepted by Supabase before it is marked linked locally.
         val remoteSuccess = supabaseDataSource.upsertDevice(profile)
+        if (!remoteSuccess) return false
 
-        // Save locally
         preferencesDataSource.saveDeviceProfile(profile)
 
-        // Fetch any existing custom policy for this device
-        val remotePolicy = supabaseDataSource.fetchQuotaPolicy(profile.deviceKey)
-        if (remotePolicy != null) {
-            preferencesDataSource.updateQuotaLimit(remotePolicy.monthlyLimitGb)
-            preferencesDataSource.setBlockedStatus(remotePolicy.isBlocked)
+        // Quota policy belongs to the household administrator. Fetch it after linking
+        // so registration is not blocked by a second sequential network request.
+        scope.launch {
+            val remotePolicy = supabaseDataSource.fetchQuotaPolicy(profile.deviceKey)
+            if (remotePolicy != null) {
+                preferencesDataSource.updateQuotaLimit(remotePolicy.monthlyLimitGb)
+                preferencesDataSource.setBlockedStatus(remotePolicy.isBlocked)
+            }
         }
 
-        return remoteSuccess
+        return true
     }
 
     override suspend fun clearProfile() {

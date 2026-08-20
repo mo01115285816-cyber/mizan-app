@@ -2,6 +2,7 @@ package com.example.feature.home.components
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
@@ -105,12 +106,7 @@ fun MizanTopCapsulesBar(
                 .fillMaxWidth()
                 .statusBarsPadding()
                 .padding(horizontal = 18.dp, vertical = 8.dp)
-                .animateContentSize(
-                    animationSpec = spring(
-                        stiffness = Spring.StiffnessMediumLow,
-                        dampingRatio = Spring.DampingRatioLowBouncy
-                    )
-                )
+                .animateContentSize(animationSpec = tween(durationMillis = 120))
                 .testTag("floating_top_capsules_bar"),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically

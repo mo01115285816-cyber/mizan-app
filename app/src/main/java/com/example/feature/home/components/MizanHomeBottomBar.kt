@@ -2,8 +2,7 @@ package com.example.feature.home.components
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -103,10 +102,7 @@ fun MizanHomeBottomBar(
 
                     val bgAnimatedColor by animateColorAsState(
                         targetValue = if (isSelected) activePillColor else Color.Transparent,
-                        animationSpec = spring(
-                            stiffness = Spring.StiffnessMediumLow,
-                            dampingRatio = Spring.DampingRatioLowBouncy
-                        ),
+                        animationSpec = tween(durationMillis = 120),
                         label = "tab_bg_${item.tab.name}"
                     )
 
@@ -126,10 +122,7 @@ fun MizanHomeBottomBar(
                                 }
                             )
                             .animateContentSize(
-                                animationSpec = spring(
-                                    stiffness = Spring.StiffnessMediumLow,
-                                    dampingRatio = Spring.DampingRatioLowBouncy
-                                )
+                                animationSpec = tween(durationMillis = 120)
                             )
                             .padding(
                                 horizontal = if (isSelected) 18.dp else 14.dp,

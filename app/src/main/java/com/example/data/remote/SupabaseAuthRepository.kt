@@ -23,6 +23,11 @@ data class GoogleAuthResult(
     val errorMessage: String? = null
 )
 
+data class HouseholdMembershipResult(
+    val requestSucceeded: Boolean,
+    val householdId: String? = null
+)
+
 class SupabaseAuthRepository(
     private val context: Context,
     private val okHttpClient: OkHttpClient = OkHttpClient.Builder()
@@ -311,35 +316,40 @@ class SupabaseAuthRepository(
         }
     }
 
-    suspend fun fetchHouseholdMembership(): String? = withContext(Dispatchers.IO) {
-        val token = getValidAccessToken() ?: return@withContext null
-        val userId = getUserId() ?: return@withContext null
+    suspend fun fetchHouseholdMembership(): String? =
+        fetchHouseholdMembershipResult().householdId
 
-        try {
-            val endpoint = "$supabaseUrl/rest/v1/household_members?user_id=eq.$userId&select=household_id"
-            val request = Request.Builder()
-                .url(endpoint)
-                .addHeader("apikey", supabaseAnonKey)
-                .addHeader("Authorization", "Bearer $token")
-                .get()
-                .build()
+    suspend fun fetchHouseholdMembershipResult(): HouseholdMembershipResult = withContext(Dispatchers.IO) {
+        val token = getValidAccessToken() ?: return@withContext HouseholdMembershipResult(false)
+        val userId = getUserId() ?: return@withContext HouseholdMembershipResult(false)
+        val endpoint = "$supabaseUrl/rest/v1/household_members?user_id=eq.$userId&select=household_id&limit=1"
 
-            val response = okHttpClient.newCall(request).execute()
-            val body = response.body?.string().orEmpty()
+        repeat(2) { attempt ->
+            try {
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .addHeader("apikey", supabaseAnonKey)
+                    .addHeader("Authorization", "Bearer $token")
+                    .get()
+                    .build()
 
-            if (response.isSuccessful) {
-                val array = JSONArray(body)
-                if (array.length() > 0) {
-                    val item = array.getJSONObject(0)
-                    return@withContext item.getString("household_id")
+                okHttpClient.newCall(request).execute().use { response ->
+                    val body = response.body?.string().orEmpty()
+                    if (response.isSuccessful) {
+                        val array = JSONArray(body)
+                        val householdId = if (array.length() > 0) {
+                            array.getJSONObject(0).optString("household_id").ifBlank { null }
+                        } else null
+                        return@withContext HouseholdMembershipResult(true, householdId)
+                    }
+                    Log.e(TAG, "Error fetching household membership: HTTP ${response.code}")
                 }
-            } else {
-                Log.e(TAG, "Error fetching household membership: ${response.code} $body")
+            } catch (e: Exception) {
+                Log.w(TAG, "Membership lookup attempt ${attempt + 1} failed: ${e.message}")
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to query household members", e)
+            if (attempt == 0) kotlinx.coroutines.delay(250L)
         }
-        return@withContext null
+        HouseholdMembershipResult(false)
     }
 
     suspend fun acceptInvite(inviteToken: String): Boolean = withContext(Dispatchers.IO) {
@@ -402,7 +412,7 @@ class SupabaseAuthRepository(
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error accepting invite: $inviteToken", e)
+            Log.e(TAG, "Error accepting invite", e)
         }
         return@withContext false
     }

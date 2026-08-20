@@ -33,8 +33,6 @@ import androidx.compose.material.icons.outlined.Wifi
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -42,7 +40,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -81,11 +78,9 @@ fun AccountScreen(
     userPhotoUrl: String,
     householdId: String,
     deviceModel: String,
-    quotaLimitGb: Float,
     isVpnEnabled: Boolean,
     isDeviceAdminEnabled: Boolean,
     permissionsState: MizanPermissionsState,
-    onUpdateQuotaLimit: (Float) -> Unit,
     onToggleVpnConsent: (Boolean) -> Unit,
     onToggleDeviceAdmin: (Boolean) -> Unit,
     onOpenPermissionsHub: () -> Unit,
@@ -93,29 +88,20 @@ fun AccountScreen(
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var quotaSliderValue by remember(quotaLimitGb) { mutableFloatStateOf(if (quotaLimitGb > 0f) quotaLimitGb else 133.3f) }
     var onlyHomeWifi by remember { mutableStateOf(true) }
     var showSignOutConfirm by remember { mutableStateOf(false) }
 
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-        Column(
+        Box(
             modifier = modifier
                 .fillMaxSize()
                 .background(MizanColors.Paper)
-                .padding(horizontal = 16.dp)
         ) {
-            // Floating Top Capsules Bar (Brand Capsule + Actions Capsule)
-            MizanTopCapsulesBar(
-                brandTitle = "الإعدادات",
-                brandSubtitle = "الحساب والأمان",
-                onRefreshClick = onSyncNow,
-                userPhotoUrl = userPhotoUrl
-            )
-
-            Spacer(modifier = Modifier.height(4.dp))
-
             LazyColumn(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp)
+                    .padding(top = 72.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 // 1. Google Account Card
@@ -187,82 +173,6 @@ fun AccountScreen(
                                         style = MizanTypography.Caption,
                                         color = Color(0xFF3F7E16),
                                         fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // 2. Quota Management Policy Card
-                item {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(24.dp))
-                            .background(MizanColors.WarmWhite)
-                            .border(1.dp, MizanColors.Line, RoundedCornerShape(24.dp))
-                            .padding(18.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "حصة البيانات الشهرية",
-                                style = MizanTypography.Title,
-                                color = MizanColors.Charcoal
-                            )
-                            Text(
-                                text = "${String.format(java.util.Locale.US, "%.1f", quotaSliderValue)} GB",
-                                style = MizanTypography.Title,
-                                color = Color(0xFF3F7E16),
-                                fontWeight = FontWeight.Black
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        Slider(
-                            value = quotaSliderValue,
-                            onValueChange = { quotaSliderValue = it },
-                            onValueChangeFinished = { onUpdateQuotaLimit(quotaSliderValue) },
-                            valueRange = 20f..500f,
-                            steps = 47,
-                            colors = SliderDefaults.colors(
-                                thumbColor = MizanColors.Charcoal,
-                                activeTrackColor = MizanColors.Lime,
-                                inactiveTrackColor = MizanColors.Line
-                            ),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        // Quick Presets
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            listOf(50f, 100f, 133.3f, 200f, 300f).forEach { preset ->
-                                val isSelected = (quotaSliderValue - preset) in -1f..1f
-                                Box(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(34.dp)
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .background(if (isSelected) MizanColors.Lime else MizanColors.Paper)
-                                        .border(1.dp, if (isSelected) MizanColors.Charcoal else MizanColors.Line, RoundedCornerShape(10.dp))
-                                        .fluidPressEffect(onClick = {
-                                            quotaSliderValue = preset
-                                            onUpdateQuotaLimit(preset)
-                                        }),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = "${preset.toInt()}G",
-                                        style = MizanTypography.Caption,
-                                        color = MizanColors.Charcoal,
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                                     )
                                 }
                             }
@@ -463,6 +373,14 @@ fun AccountScreen(
                     Spacer(modifier = Modifier.height(80.dp))
                 }
             }
+
+            MizanTopCapsulesBar(
+                modifier = Modifier.align(Alignment.TopCenter),
+                brandTitle = "الإعدادات",
+                brandSubtitle = "الحساب والأمان",
+                onRefreshClick = onSyncNow,
+                userPhotoUrl = userPhotoUrl
+            )
         }
     }
 

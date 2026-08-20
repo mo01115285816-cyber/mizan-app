@@ -151,29 +151,17 @@ fun UsageScreen(
     val totalUsageGb = wifiUsageGb + mobileUsageGb
 
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-        Column(
+        Box(
             modifier = modifier
                 .fillMaxSize()
                 .background(MizanColors.Paper)
-                .padding(horizontal = 16.dp)
         ) {
-            // Floating Top Capsules Bar (Brand Capsule + Actions Capsule with Search Expansion)
-            MizanTopCapsulesBar(
-                brandTitle = "الاستهلاك",
-                brandSubtitle = "تحليل حي",
-                showSearch = true,
-                searchQuery = searchQuery,
-                onSearchQueryChange = { searchQuery = it },
-                isSearchActive = showSearchBar,
-                onSearchActiveChange = { showSearchBar = it },
-                searchPlaceholder = "ابحث عن تطبيق...",
-                onRefreshClick = {
-                    loadDataForPeriod(selectedPeriod)
-                    onRefresh()
-                }
-            )
-
-            Spacer(modifier = Modifier.height(4.dp))
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp)
+                    .padding(top = 72.dp)
+            ) {
 
             // Fluid Period Switcher
             Row(
@@ -287,7 +275,24 @@ fun UsageScreen(
                 item {
                     Spacer(modifier = Modifier.height(80.dp))
                 }
+                }
             }
+
+            MizanTopCapsulesBar(
+                modifier = Modifier.align(Alignment.TopCenter),
+                brandTitle = "الاستهلاك",
+                brandSubtitle = "تحليل حي",
+                showSearch = true,
+                searchQuery = searchQuery,
+                onSearchQueryChange = { searchQuery = it },
+                isSearchActive = showSearchBar,
+                onSearchActiveChange = { showSearchBar = it },
+                searchPlaceholder = "ابحث عن تطبيق...",
+                onRefreshClick = {
+                    loadDataForPeriod(selectedPeriod)
+                    onRefresh()
+                }
+            )
         }
     }
 }

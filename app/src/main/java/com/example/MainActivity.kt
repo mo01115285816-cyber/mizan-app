@@ -222,7 +222,6 @@ class MainActivity : ComponentActivity() {
                                 onRefreshNetworkDetails = { viewModel.refreshUsage() },
                                 onOpenPermissionsHub = { viewModel.onShowPermissionsHub(true) },
                                 onDismissPermissionsHub = { viewModel.onShowPermissionsHub(false) },
-                                onUpdateQuotaLimit = { viewModel.updateQuotaLimit(it) },
                                 onToggleVpnConsent = { viewModel.setVpnConsentGranted(it) },
                                 onToggleDeviceAdmin = { viewModel.setDeviceAdminEnabled(it) },
                                 onRequestUsageAccess = { viewModel.openUsageAccessSettings(this@MainActivity) },
