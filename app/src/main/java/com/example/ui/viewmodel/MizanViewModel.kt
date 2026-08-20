@@ -229,8 +229,9 @@ class MizanViewModel(
                 repository.getQuotaInfo(),
                 repository.getTopConsumingApps(),
                 repository.getDailyUsageTrend(),
-                preferences.deviceProfileFlow
-            ) { quotaRes, appsRes, trend, profile ->
+                preferences.deviceProfileFlow,
+                preferences.remoteEnforceVpnBlockFlow
+            ) { quotaRes, appsRes, trend, profile, enforceVpnBlock ->
                 if (profile == null) return@combine
 
                 val permState = PermissionHelper.checkAllPermissions(context)
@@ -277,7 +278,7 @@ class MizanViewModel(
                     )
                 }
 
-                val isExhausted = (quota.usedGigabytes >= quota.totalGigabytes && quota.totalGigabytes > 0f) || profile.isBlocked
+                val isExhausted = profile.isBlocked || (enforceVpnBlock && quota.usedGigabytes >= quota.totalGigabytes && quota.totalGigabytes > 0f)
                 if (isExhausted) {
                     _appState.value = AppState.QuotaExhausted(
                         reason = if (profile.isBlocked) "تم إيقاف الاتصال من قبل إدارة الشبكة" else "اكتملت حصتك الشهرية المحددة"

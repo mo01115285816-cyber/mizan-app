@@ -50,6 +50,7 @@ class MizanRepositoryImpl(
             supabaseDataSource.realtimePolicyUpdates.collect { updatedPolicy ->
                 preferencesDataSource.updateQuotaLimit(updatedPolicy.monthlyLimitGb)
                 preferencesDataSource.setBlockedStatus(updatedPolicy.isBlocked)
+                preferencesDataSource.setRemoteEnforceVpnBlock(updatedPolicy.enforceVpnBlock)
             }
         }
         scope.launch {
@@ -95,6 +96,7 @@ class MizanRepositoryImpl(
             if (remotePolicy != null) {
                 preferencesDataSource.updateQuotaLimit(remotePolicy.monthlyLimitGb)
                 preferencesDataSource.setBlockedStatus(remotePolicy.isBlocked)
+                preferencesDataSource.setRemoteEnforceVpnBlock(remotePolicy.enforceVpnBlock)
             }
         }
 
@@ -113,6 +115,11 @@ class MizanRepositoryImpl(
         if (quotaPolicy != null) {
             preferencesDataSource.updateQuotaLimit(quotaPolicy.monthlyLimitGb)
             preferencesDataSource.setBlockedStatus(quotaPolicy.isBlocked)
+            preferencesDataSource.setRemoteEnforceVpnBlock(quotaPolicy.enforceVpnBlock)
+        }
+        val networkDetails = NetworkInfoProvider.getConnectedNetworkDetails(context)
+        if (networkDetails.isWifi) {
+            supabaseDataSource.syncNetworkTelemetry(profile.deviceKey, networkDetails)
         }
         return supabaseDataSource.upsertDevice(profile, includePolicyFields = false)
     }

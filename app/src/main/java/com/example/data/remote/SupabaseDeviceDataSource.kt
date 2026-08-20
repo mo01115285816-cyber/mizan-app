@@ -5,6 +5,7 @@ import com.example.BuildConfig
 import com.example.core.model.DeviceProfile
 import com.example.core.model.QuotaPolicy
 import com.example.core.model.UsageSnapshot
+import com.example.core.common.NetworkDetails
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -140,6 +141,38 @@ class SupabaseDeviceDataSource(
             successful
         } catch (e: Exception) {
             Log.w(tag, "Failed to upsert device to Supabase: ${e.message}")
+            false
+        }
+    }
+
+    /**
+     * Sends observed network telemetry only. This is intentionally separate from usage
+     * snapshots so an unknown Wi-Fi network can be shown to the administrator without
+     * counting any bytes before Target SSID is confirmed.
+     */
+    suspend fun syncNetworkTelemetry(deviceKey: String, details: NetworkDetails): Boolean = withContext(Dispatchers.IO) {
+        if (!isConfigured || deviceKey.isBlank() || !details.isWifi) return@withContext false
+        try {
+            val payload = JSONObject().apply {
+                put("latest_ssid", details.ssid)
+                put("latest_gateway_ip", details.gateway)
+                put("latest_wifi_band", details.frequencyGhz)
+                put("latest_security_type", details.securityType)
+                put("latest_signal_percent", details.signalPercentage)
+                put("latest_link_speed_mbps", details.linkSpeedMbps)
+                put("network_updated_at", getIso8601Timestamp())
+                put("last_seen_at", getIso8601Timestamp())
+            }
+            val response = client.newCall(Request.Builder()
+                .url("$supabaseUrl/rest/v1/devices?device_key=eq.$deviceKey")
+                .header("apikey", anonKey)
+                .header("Authorization", "Bearer ${getAuthBearerToken()}")
+                .header("Content-Type", "application/json")
+                .patch(payload.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
+                .build()).execute()
+            response.use { it.isSuccessful }
+        } catch (e: Exception) {
+            Log.w(tag, "Failed to sync network telemetry: ${e.message}")
             false
         }
     }

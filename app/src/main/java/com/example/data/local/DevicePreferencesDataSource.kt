@@ -46,6 +46,7 @@ class DevicePreferencesDataSource(private val context: Context) {
         val KEY_WIFI_BASELINE_INITIALIZED = booleanPreferencesKey("wifi_baseline_initialized")
         val KEY_LAST_SYNC_TIME = longPreferencesKey("last_sync_time")
         val KEY_IS_BLOCKED = booleanPreferencesKey("is_blocked")
+        val KEY_REMOTE_ENFORCE_VPN_BLOCK = booleanPreferencesKey("remote_enforce_vpn_block")
         val KEY_IS_VPN_CONSENT_GRANTED = booleanPreferencesKey("is_vpn_consent_granted")
         val KEY_IS_DEVICE_ADMIN_ENABLED = booleanPreferencesKey("is_device_admin_enabled")
         val KEY_IS_ACTIVE = booleanPreferencesKey("is_active")
@@ -130,6 +131,10 @@ class DevicePreferencesDataSource(private val context: Context) {
         preferences[KEY_IS_BLOCKED] ?: false
     }
 
+    val remoteEnforceVpnBlockFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[KEY_REMOTE_ENFORCE_VPN_BLOCK] ?: true
+    }
+
     val isVpnConsentFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
         preferences[KEY_IS_VPN_CONSENT_GRANTED] ?: false
     }
@@ -167,6 +172,12 @@ class DevicePreferencesDataSource(private val context: Context) {
     suspend fun setBlockedStatus(isBlocked: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[KEY_IS_BLOCKED] = isBlocked
+        }
+    }
+
+    suspend fun setRemoteEnforceVpnBlock(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_REMOTE_ENFORCE_VPN_BLOCK] = enabled
         }
     }
 

@@ -100,7 +100,10 @@ class QuotaVpnService : VpnService() {
             val builder = Builder()
                 .setSession("ميزان • إيقاف الحصة")
                 .addAddress("10.0.0.2", 32)
+                .addAddress("fd00:6d69:7a61::2", 128)
                 .addRoute("0.0.0.0", 0)
+                .addRoute("::", 0)
+                .setBlocking(true)
                 .setMtu(1500)
 
             // Disallow Mizan app so it can still sync with Supabase
@@ -111,6 +114,7 @@ class QuotaVpnService : VpnService() {
             }
 
             vpnInterface = builder.establish()
+                ?: throw IllegalStateException("Android refused to establish the VPN interface")
             startPacketDrainLoop()
             Log.i(tag, "Quota VPN restriction established successfully.")
         } catch (e: Exception) {

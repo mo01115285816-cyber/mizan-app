@@ -147,6 +147,7 @@ class UsageTrackingService : Service() {
         )
 
         val consumedGb = snapshot?.consumedGb ?: 0f
+        val enforceVpnBlock = preferences.remoteEnforceVpnBlockFlow.first()
         val notificationText = if (isHomeNetwork) {
             "متصل بشبكة المنزل (${networkDetails.ssid}) • الاستهلاك: ${consumedGb} جيجابايت"
         } else if (networkDetails.isCellular) {
@@ -162,15 +163,17 @@ class UsageTrackingService : Service() {
         // Background Enforcement of Quota strictly tied to Home Router
         if (profile != null) {
             val totalGb = profile.quotaLimitGb
-            val isExhausted = (consumedGb >= totalGb && totalGb > 0f) || profile.isBlocked
+            val manualBlock = profile.isBlocked
+            val quotaBlock = enforceVpnBlock && consumedGb >= totalGb && totalGb > 0f && isHomeNetwork
+            val shouldBlock = manualBlock || quotaBlock
 
-            if (isExhausted && isHomeNetwork) {
+            if (shouldBlock) {
                 if (profile.isVpnEnforcementEnabled && QuotaVpnService.isVpnPrepared(applicationContext)) {
                     QuotaVpnService.start(applicationContext)
                     QuotaOverlayService.show(applicationContext)
                 }
             } else {
-                // If not on home router or quota not exhausted, restore free internet
+                // No manual block and no home-Wi-Fi quota exhaustion: restore connectivity.
                 QuotaVpnService.stop(applicationContext)
                 QuotaOverlayService.hide(applicationContext)
             }
