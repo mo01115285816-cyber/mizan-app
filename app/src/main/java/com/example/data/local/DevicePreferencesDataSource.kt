@@ -32,6 +32,7 @@ class DevicePreferencesDataSource(private val context: Context) {
         val KEY_HOUSEHOLD_ID = stringPreferencesKey("household_id")
         val KEY_IS_LINKED = booleanPreferencesKey("is_linked")
         val KEY_HOME_SSID = stringPreferencesKey("home_ssid")
+        val KEY_TARGET_SSID = stringPreferencesKey("target_ssid")
         val KEY_HOME_BSSID = stringPreferencesKey("home_bssid")
         val KEY_QUOTA_LIMIT_GB = floatPreferencesKey("quota_limit_gb")
         val KEY_CURRENT_USAGE_GB = floatPreferencesKey("current_usage_gb")
@@ -97,7 +98,7 @@ class DevicePreferencesDataSource(private val context: Context) {
                 deviceModel = android.os.Build.MODEL ?: "Android",
                 manufacturer = android.os.Build.MANUFACTURER ?: "Unknown",
                 osVersion = "Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})",
-                homeSsid = preferences[KEY_HOME_SSID] ?: "Mizan-Home-5G",
+                homeSsid = preferences[KEY_HOME_SSID] ?: "",
                 quotaLimitGb = preferences[KEY_QUOTA_LIMIT_GB] ?: 133.3f,
                 currentUsageGb = preferences[KEY_CURRENT_USAGE_GB] ?: 0f,
                 isBlocked = preferences[KEY_IS_BLOCKED] ?: false,
@@ -114,7 +115,11 @@ class DevicePreferencesDataSource(private val context: Context) {
     }
 
     val homeSsidFlow: Flow<String> = context.dataStore.data.map { preferences ->
-        preferences[KEY_HOME_SSID] ?: "Mizan-Home-5G"
+        preferences[KEY_HOME_SSID] ?: ""
+    }
+
+    val targetSsidFlow: Flow<String> = context.dataStore.data.map { preferences ->
+        preferences[KEY_TARGET_SSID] ?: ""
     }
 
     val homeBssidFlow: Flow<String> = context.dataStore.data.map { preferences ->
@@ -136,6 +141,7 @@ class DevicePreferencesDataSource(private val context: Context) {
             preferences[KEY_USER_ID] = profile.userId
             preferences[KEY_HOUSEHOLD_ID] = profile.householdId
             preferences[KEY_HOME_SSID] = profile.homeSsid
+            if (!preferences.contains(KEY_TARGET_SSID)) preferences[KEY_TARGET_SSID] = ""
             preferences[KEY_QUOTA_LIMIT_GB] = profile.quotaLimitGb
             preferences[KEY_CURRENT_USAGE_GB] = profile.currentUsageGb
             preferences[KEY_IS_BLOCKED] = profile.isBlocked
@@ -161,6 +167,12 @@ class DevicePreferencesDataSource(private val context: Context) {
     suspend fun setBlockedStatus(isBlocked: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[KEY_IS_BLOCKED] = isBlocked
+        }
+    }
+
+    suspend fun setTargetSsid(ssid: String) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_TARGET_SSID] = ssid.trim()
         }
     }
 

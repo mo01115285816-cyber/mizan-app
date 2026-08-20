@@ -43,21 +43,26 @@ class SupabaseDeviceDataSource(
 
     private val _realtimePolicyUpdates = MutableSharedFlow<QuotaPolicy>(extraBufferCapacity = 10)
     val realtimePolicyUpdates: SharedFlow<QuotaPolicy> = _realtimePolicyUpdates.asSharedFlow()
+    private val _realtimeTargetSsidUpdates = MutableSharedFlow<String>(extraBufferCapacity = 10)
+    val realtimeTargetSsidUpdates: SharedFlow<String> = _realtimeTargetSsidUpdates.asSharedFlow()
 
     private var activeWebSocket: WebSocket? = null
     private var heartbeatJob: Job? = null
     private var reconnectJob: Job? = null
     private var subscribedDeviceKey: String? = null
+    private var subscribedHouseholdId: String? = null
 
     companion object {
         const val DEFAULT_SUPABASE_URL = "https://ecfgmznpkyekgpqsdhhr.supabase.co"
         const val DEFAULT_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVjZmdtem5wa3lla2dwcXNkaGhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcwMDQxNzAsImV4cCI6MjEwMjU4MDE3MH0.oEsbiq2G9iUmS6kcGGvAFKVf9fraDDB0kmukac6XQjE"
 
-        private fun getIso8601Timestamp(): String {
+        private fun iso8601(timestamp: Long): String {
             val df = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
             df.timeZone = TimeZone.getTimeZone("UTC")
-            return df.format(Date())
+            return df.format(Date(timestamp))
         }
+
+        private fun getIso8601Timestamp(): String = iso8601(System.currentTimeMillis())
     }
 
     val supabaseUrl: String
@@ -151,6 +156,14 @@ class SupabaseDeviceDataSource(
                 put("total_bytes", snapshot.totalBytes)
                 put("consumed_gb", snapshot.consumedGb)
                 put("ssid", snapshot.ssid)
+                put("gateway_ip", snapshot.gatewayIp)
+                put("wifi_band", snapshot.wifiBand)
+                put("security_type", snapshot.securityType)
+                put("signal_percent", snapshot.signalPercent)
+                put("link_speed_mbps", snapshot.linkSpeedMbps)
+                put("tracking_started_at", if (snapshot.trackingStartedAt > 0L) iso8601(snapshot.trackingStartedAt) else JSONObject.NULL)
+                put("baseline_rx_bytes", snapshot.baselineRxBytes)
+                put("baseline_tx_bytes", snapshot.baselineTxBytes)
                 put("timestamp", getIso8601Timestamp())
             }
 
@@ -167,7 +180,56 @@ class SupabaseDeviceDataSource(
             val response = client.newCall(request).execute()
             val successful = response.isSuccessful
             response.close()
-            successful
+            if (!successful) return@withContext false
+
+            val userId = authRepository?.getUserId()
+            snapshot.appSnapshots.forEach { app ->
+                try {
+                    val appJson = JSONObject().apply {
+                        put("device_key", deviceKey)
+                        if (!userId.isNullOrBlank()) put("user_id", userId)
+                        put("package_name", app.packageName)
+                        put("app_name", app.appName)
+                        put("usage_bytes", (app.consumedGb * UsageSnapshot.BYTES_PER_GB).toLong())
+                        put("usage_gb", app.consumedGb)
+                        put("recorded_date", iso8601(snapshot.timestamp).substring(0, 10))
+                    }
+                    val appRequest = Request.Builder()
+                        .url("$supabaseUrl/rest/v1/app_usage_records")
+                        .header("apikey", anonKey)
+                        .header("Authorization", "Bearer $bearer")
+                        .header("Content-Type", "application/json")
+                        .post(appJson.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
+                        .build()
+                    client.newCall(appRequest).execute().close()
+                } catch (appError: Exception) {
+                    Log.w(tag, "Failed to send app usage row: ${appError.message}")
+                }
+            }
+
+            val deviceUpdate = JSONObject().apply {
+                put("current_usage_gb", snapshot.consumedGb)
+                put("latest_ssid", snapshot.ssid)
+                put("latest_gateway_ip", snapshot.gatewayIp)
+                put("latest_wifi_band", snapshot.wifiBand)
+                put("latest_security_type", snapshot.securityType)
+                put("latest_signal_percent", snapshot.signalPercent)
+                put("latest_link_speed_mbps", snapshot.linkSpeedMbps)
+                put("tracking_enabled", snapshot.trackingStartedAt > 0L)
+                if (snapshot.trackingStartedAt > 0L) put("tracking_started_at", iso8601(snapshot.trackingStartedAt))
+                put("baseline_rx_bytes", snapshot.baselineRxBytes)
+                put("baseline_tx_bytes", snapshot.baselineTxBytes)
+                put("network_updated_at", getIso8601Timestamp())
+                put("last_seen_at", getIso8601Timestamp())
+            }
+            val deviceRequest = Request.Builder()
+                .url("$supabaseUrl/rest/v1/devices?device_key=eq.$deviceKey")
+                .header("apikey", anonKey)
+                .header("Authorization", "Bearer $bearer")
+                .header("Content-Type", "application/json")
+                .patch(deviceUpdate.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
+                .build()
+            client.newCall(deviceRequest).execute().use { it.isSuccessful }
         } catch (e: Exception) {
             Log.w(tag, "Failed to send usage snapshot: ${e.message}")
             false
@@ -204,9 +266,9 @@ class SupabaseDeviceDataSource(
             val item = array.getJSONObject(0)
             QuotaPolicy(
                 deviceId = item.optString("device_key", deviceKey),
-                monthlyLimitGb = item.optDouble("monthly_limit_gb", 133.3).toFloat(),
+                monthlyLimitGb = item.optDouble("monthly_limit_gb", 0.0).toFloat(),
                 warningThresholdPercent = item.optInt("warning_threshold_percent", 85),
-                homeSsid = item.optString("home_ssid", "Mizan-Home-5G"),
+                homeSsid = item.optString("home_ssid", ""),
                 enforceVpnBlock = item.optBoolean("enforce_vpn_block", false),
                 isBlocked = item.optBoolean("is_blocked", false),
                 reason = item.optString("reason", null)
@@ -217,11 +279,37 @@ class SupabaseDeviceDataSource(
         }
     }
 
+    suspend fun fetchTargetSsid(householdId: String): String? = withContext(Dispatchers.IO) {
+        if (!isConfigured || householdId.isBlank()) return@withContext null
+        try {
+            val bearer = getAuthBearerToken()
+            val request = Request.Builder()
+                .url("$supabaseUrl/rest/v1/gateway_system_settings?household_id=eq.$householdId&select=target_ssid&limit=1")
+                .header("apikey", anonKey)
+                .header("Authorization", "Bearer $bearer")
+                .get()
+                .build()
+            val response = client.newCall(request).execute()
+            if (!response.isSuccessful) {
+                response.close()
+                return@withContext null
+            }
+            val body = response.body?.string() ?: "[]"
+            response.close()
+            val array = JSONArray(body)
+            if (array.length() == 0) null else array.getJSONObject(0).optString("target_ssid", "").trim()
+        } catch (e: Exception) {
+            Log.w(tag, "Failed to fetch target SSID: ${e.message}")
+            null
+        }
+    }
+
     /**
      * Subscribes to Supabase Realtime WebSocket to receive instant quota policy updates.
      */
-    fun startRealtimeSubscription(deviceKey: String) {
+    fun startRealtimeSubscription(deviceKey: String, householdId: String? = null) {
         subscribedDeviceKey = deviceKey
+        subscribedHouseholdId = householdId
         if (!isConfigured || activeWebSocket != null) return
 
         try {
@@ -239,6 +327,15 @@ class SupabaseDeviceDataSource(
                         put("ref", "1")
                     }
                     webSocket.send(joinMsg.toString())
+                    subscribedHouseholdId?.takeIf { it.isNotBlank() }?.let { householdId ->
+                        val settingsJoin = JSONObject().apply {
+                            put("topic", "realtime:public:gateway_system_settings:household_id=eq.$householdId")
+                            put("event", "phx_join")
+                            put("payload", JSONObject())
+                            put("ref", "2")
+                        }
+                        webSocket.send(settingsJoin.toString())
+                    }
                     startHeartbeat(webSocket)
                 }
 
@@ -249,12 +346,15 @@ class SupabaseDeviceDataSource(
                         if (event == "postgres_changes" || event == "broadcast") {
                             val payload = json.optJSONObject("payload")
                             val record = payload?.optJSONObject("data")?.optJSONObject("record")
-                            if (record != null) {
+                            if (record != null && record.has("target_ssid")) {
+                                scope.launch { _realtimeTargetSsidUpdates.emit(record.optString("target_ssid", "").trim()) }
+                            }
+                            if (record != null && record.has("device_key")) {
                                 val updatedPolicy = QuotaPolicy(
                                     deviceId = record.optString("device_key", deviceKey),
-                                    monthlyLimitGb = record.optDouble("monthly_limit_gb", 133.3).toFloat(),
+                                    monthlyLimitGb = record.optDouble("monthly_limit_gb", 0.0).toFloat(),
                                     warningThresholdPercent = record.optInt("warning_threshold_percent", 85),
-                                    homeSsid = record.optString("home_ssid", "Mizan-Home-5G"),
+                                    homeSsid = record.optString("home_ssid", ""),
                                     enforceVpnBlock = record.optBoolean("enforce_vpn_block", false),
                                     isBlocked = record.optBoolean("is_blocked", false),
                                     reason = record.optString("reason", null)
@@ -288,7 +388,7 @@ class SupabaseDeviceDataSource(
             delay(10000L)
             val devKey = subscribedDeviceKey
             if (devKey != null && activeWebSocket == null) {
-                startRealtimeSubscription(devKey)
+                startRealtimeSubscription(devKey, subscribedHouseholdId)
             }
         }
     }
@@ -315,6 +415,7 @@ class SupabaseDeviceDataSource(
 
     fun stopRealtimeSubscription() {
         subscribedDeviceKey = null
+        subscribedHouseholdId = null
         reconnectJob?.cancel()
         heartbeatJob?.cancel()
         heartbeatJob = null

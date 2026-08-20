@@ -40,16 +40,22 @@ class MizanRepositoryImpl(
         scope.launch {
             preferencesDataSource.deviceProfileFlow.collect { profile ->
                 if (profile != null && profile.deviceKey.isNotBlank()) {
-                    supabaseDataSource.startRealtimeSubscription(profile.deviceKey)
+                    supabaseDataSource.startRealtimeSubscription(profile.deviceKey, profile.householdId)
                 }
             }
         }
 
-        // Apply realtime updates if received
+        // Apply realtime quota and Target SSID updates as soon as the dashboard changes them.
         scope.launch {
             supabaseDataSource.realtimePolicyUpdates.collect { updatedPolicy ->
                 preferencesDataSource.updateQuotaLimit(updatedPolicy.monthlyLimitGb)
                 preferencesDataSource.setBlockedStatus(updatedPolicy.isBlocked)
+            }
+        }
+        scope.launch {
+            supabaseDataSource.realtimeTargetSsidUpdates.collect { targetSsid ->
+                preferencesDataSource.setTargetSsid(targetSsid)
+                preferencesDataSource.setHomeBssid("")
             }
         }
     }
@@ -64,6 +70,8 @@ class MizanRepositoryImpl(
         if (!remoteSuccess) return false
 
         preferencesDataSource.saveDeviceProfile(profile)
+        val targetSsid = supabaseDataSource.fetchTargetSsid(profile.householdId)
+        if (targetSsid != null) preferencesDataSource.setTargetSsid(targetSsid)
 
         // Fairness baseline: capture only Wi-Fi counters at the exact moment
         // the device is linked. Pre-activation traffic never enters Mizan quota.
@@ -138,15 +146,15 @@ class MizanRepositoryImpl(
             val hasPermission = networkStatsDataSource.hasUsageStatsPermission()
             val networkDetails = NetworkInfoProvider.getConnectedNetworkDetails(context)
             val profile = getDeviceProfileSync()
-            val totalGb = profile?.quotaLimitGb ?: 133.3f
+            val totalGb = profile?.quotaLimitGb ?: 0f
             val homeSsid = profile?.homeSsid ?: ""
+            val targetSsid = preferencesDataSource.targetSsidFlow.first().ifBlank { homeSsid }
             val homeBssid = preferencesDataSource.homeBssidFlow.first()
             val baseline = preferencesDataSource.getWifiBaseline()
 
             val isHome = networkDetails.isWifi && (
                 (homeBssid.isNotBlank() && networkDetails.bssid.equals(homeBssid, ignoreCase = true)) ||
-                (networkDetails.ssid.equals(homeSsid, ignoreCase = true)) ||
-                (homeBssid.isBlank() && (homeSsid.isBlank() || networkDetails.ssid.contains("Home", ignoreCase = true) || networkDetails.ssid.contains("منزل", ignoreCase = true)))
+                (targetSsid.isNotBlank() && networkDetails.ssid.equals(targetSsid, ignoreCase = true))
             )
 
             // Auto-lock router BSSID on first confirmed home connection
@@ -254,17 +262,30 @@ class MizanRepositoryImpl(
         val networkDetails = NetworkInfoProvider.getConnectedNetworkDetails(context)
         val profile = getDeviceProfileSync()
         val homeSsid = profile?.homeSsid ?: ""
+        val targetSsid = preferencesDataSource.targetSsidFlow.first().ifBlank { homeSsid }
         val homeBssid = preferencesDataSource.homeBssidFlow.first()
 
         val isHome = networkDetails.isWifi && (
             (homeBssid.isNotBlank() && networkDetails.bssid.equals(homeBssid, ignoreCase = true)) ||
-            (networkDetails.ssid.equals(homeSsid, ignoreCase = true)) ||
-            (homeBssid.isBlank() && (homeSsid.isBlank() || networkDetails.ssid.contains("Home", ignoreCase = true) || networkDetails.ssid.contains("منزل", ignoreCase = true)))
+            (targetSsid.isNotBlank() && networkDetails.ssid.equals(targetSsid, ignoreCase = true))
         )
 
-        // Auto-lock router BSSID on first confirmed home connection
+        // Auto-lock router BSSID on first confirmed target-network connection
         if (isHome && homeBssid.isBlank() && networkDetails.bssid.isNotBlank()) {
             preferencesDataSource.setHomeBssid(networkDetails.bssid)
+        }
+
+        if (!isHome) {
+            return UsageSnapshot(
+                timestamp = System.currentTimeMillis(),
+                uploadBytes = 0L,
+                downloadBytes = 0L,
+                totalBytes = 0L,
+                consumedGb = UsageSnapshot.bytesToGb(getAccumulatedHomeBytesSync()),
+                ssid = networkDetails.ssid,
+                isHomeWifi = false,
+                appSnapshots = emptyList()
+            )
         }
 
         val endTime = System.currentTimeMillis()
@@ -277,16 +298,28 @@ class MizanRepositoryImpl(
         // A missing or stale baseline is initialized now and contributes zero usage.
         if (!baseline.initialized || baseline.monthKey != currentMonth) {
             preferencesDataSource.setWifiBaseline(rx, tx, endTime, currentMonth)
-            return UsageSnapshot(
+            val baselineSnapshot = UsageSnapshot(
                 timestamp = endTime,
                 uploadBytes = 0L,
                 downloadBytes = 0L,
                 totalBytes = 0L,
                 consumedGb = 0f,
                 ssid = networkDetails.ssid,
+                gatewayIp = networkDetails.gateway,
+                wifiBand = networkDetails.frequencyGhz,
+                securityType = networkDetails.securityType,
+                signalPercent = networkDetails.signalPercentage,
+                linkSpeedMbps = networkDetails.linkSpeedMbps,
+                trackingStartedAt = endTime,
+                baselineRxBytes = rx,
+                baselineTxBytes = tx,
                 isHomeWifi = isHome,
                 appSnapshots = emptyList()
             )
+            if (profile != null && profile.deviceKey.isNotBlank()) {
+                supabaseDataSource.syncUsageSnapshot(profile.deviceKey, baselineSnapshot)
+            }
+            return baselineSnapshot
         }
 
         val lastKnownTotal = preferencesDataSource.getLastKnownTotalWifiBytes()
@@ -315,6 +348,14 @@ class MizanRepositoryImpl(
             totalBytes = cumulativeSinceActivation,
             consumedGb = consumedGb,
             ssid = networkDetails.ssid,
+            gatewayIp = networkDetails.gateway,
+            wifiBand = networkDetails.frequencyGhz,
+            securityType = networkDetails.securityType,
+            signalPercent = networkDetails.signalPercentage,
+            linkSpeedMbps = networkDetails.linkSpeedMbps,
+            trackingStartedAt = baseline.timestamp,
+            baselineRxBytes = baseline.rxBytes,
+            baselineTxBytes = baseline.txBytes,
             isHomeWifi = isHome,
             appSnapshots = topApps
         )

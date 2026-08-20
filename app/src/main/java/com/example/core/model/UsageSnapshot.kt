@@ -10,6 +10,14 @@ data class UsageSnapshot(
     val totalBytes: Long = 0L,
     val consumedGb: Float = 0f,
     val ssid: String = "",
+    val gatewayIp: String = "",
+    val wifiBand: String = "",
+    val securityType: String = "",
+    val signalPercent: Int = 0,
+    val linkSpeedMbps: Int = 0,
+    val trackingStartedAt: Long = 0L,
+    val baselineRxBytes: Long = 0L,
+    val baselineTxBytes: Long = 0L,
     val isHomeWifi: Boolean = false,
     val appSnapshots: List<AppUsageItem> = emptyList()
 ) {
