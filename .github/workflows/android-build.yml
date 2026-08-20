@@ -87,6 +87,9 @@ jobs:
             chmod 600 debug.keystore
           fi
 
+      - name: Run Android JVM unit tests
+        run: ./gradlew --no-daemon testDebugUnitTest --stacktrace
+
       - name: Build Debug APK from the uploaded source
         run: ./gradlew --no-daemon assembleDebug --stacktrace
 
