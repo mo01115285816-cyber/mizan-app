@@ -262,10 +262,12 @@ class MizanViewModel(
                         remainingGb = quota.remainingGigabytes,
                         percentage = quota.usagePercentage,
                         networkSsid = networkDetails.ssid,
-                        connectionStatus = if (networkDetails.isConnected) {
-                            "متصل بشبكة ${networkDetails.ssid}"
-                        } else {
-                            "غير متصل بالإنترنت"
+                        connectionStatus = when {
+                            !networkDetails.isConnected -> "غير متصل بالإنترنت"
+                            networkDetails.isWifi && networkDetails.ssid.startsWith("غير متاح") -> "متصل بشبكة Wi‑Fi — الاسم غير متاح"
+                            networkDetails.isWifi -> "متصل: ${networkDetails.ssid}"
+                            networkDetails.isCellular -> "متصل ببيانات الهاتف"
+                            else -> "متصل بالإنترنت"
                         },
                         networkDetails = networkDetails,
                         permissionsState = permState,

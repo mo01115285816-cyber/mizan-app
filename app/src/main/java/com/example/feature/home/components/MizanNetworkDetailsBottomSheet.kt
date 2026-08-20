@@ -178,7 +178,9 @@ fun MizanNetworkDetailsBottomSheet(
                                         fontWeight = FontWeight.Black,
                                         fontSize = 18.sp,
                                         color = Color(0xFF151515)
-                                    )
+                                    ),
+                                    maxLines = 2,
+                                    softWrap = true
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Icon(
@@ -196,7 +198,9 @@ fun MizanNetworkDetailsBottomSheet(
                                     fontWeight = FontWeight.Medium,
                                     fontSize = 13.sp,
                                     color = Color(0xFF6B7062)
-                                )
+                                ),
+                                maxLines = 2,
+                                softWrap = true
                             )
                         }
                     }

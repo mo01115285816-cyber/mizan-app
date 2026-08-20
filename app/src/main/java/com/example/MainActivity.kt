@@ -14,6 +14,9 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -51,6 +54,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        hideStatusBar()
         handleIncomingIntent(intent)
 
         setContent {
@@ -91,13 +96,15 @@ class MainActivity : ComponentActivity() {
 
                 // Initial launch checks
                 LaunchedEffect(Unit) {
-                    if (!PermissionHelper.hasLocationPermission(this@MainActivity)) {
-                        locationPermissionLauncher.launch(
-                            arrayOf(
-                                Manifest.permission.ACCESS_FINE_LOCATION,
-                                Manifest.permission.ACCESS_COARSE_LOCATION
-                            )
-                        )
+                    if (!PermissionHelper.hasLocationOrWifiPermission(this@MainActivity)) {
+                        val permissions = buildList {
+                            add(Manifest.permission.ACCESS_FINE_LOCATION)
+                            add(Manifest.permission.ACCESS_COARSE_LOCATION)
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                add(Manifest.permission.NEARBY_WIFI_DEVICES)
+                            }
+                        }.toTypedArray()
+                        locationPermissionLauncher.launch(permissions)
                     }
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
                         !PermissionHelper.hasNotificationPermission(this@MainActivity)
@@ -325,8 +332,21 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        hideStatusBar()
         viewModel.refreshUsage()
         viewModel.checkPermissions()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) hideStatusBar()
+    }
+
+    private fun hideStatusBar() {
+        WindowInsetsControllerCompat(window, window.decorView).apply {
+            hide(WindowInsetsCompat.Type.statusBars())
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
     }
 
     companion object {

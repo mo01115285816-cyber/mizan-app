@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -104,7 +103,6 @@ fun MizanTopCapsulesBar(
         Row(
             modifier = modifier
                 .fillMaxWidth()
-                .statusBarsPadding()
                 .padding(horizontal = 18.dp, vertical = 8.dp)
                 .animateContentSize(animationSpec = tween(durationMillis = 120))
                 .testTag("floating_top_capsules_bar"),

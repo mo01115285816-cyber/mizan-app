@@ -73,11 +73,11 @@ object NetworkInfoProvider {
 
         // Clean up SSID formatting
         var cleanSsid = rawSsid.trim().removeSurrounding("\"")
-        if (cleanSsid.isEmpty() ||
-            cleanSsid.equals("<unknown ssid>", ignoreCase = true) ||
-            cleanSsid.equals("0x", ignoreCase = true)
-        ) {
-            cleanSsid = if (isWifi) "شبكة Wi-Fi" else if (isCellular) "بيانات الشريحة (Mobile Data)" else if (isConnected) "متصل بالإنترنت" else "غير متصل"
+        val hasUsableSsid = cleanSsid.isNotEmpty() &&
+            !cleanSsid.equals("<unknown ssid>", ignoreCase = true) &&
+            !cleanSsid.equals("0x", ignoreCase = true)
+        if (!hasUsableSsid) {
+            cleanSsid = if (isWifi) "غير متاح — تحقق من إذن الموقع وWi‑Fi" else if (isCellular) "بيانات الهاتف" else if (isConnected) "متصل بالإنترنت" else "غير متصل"
         }
 
         val cleanBssid = if (rawBssid.isNotBlank() && rawBssid != "02:00:00:00:00:00") rawBssid else ""
@@ -93,11 +93,11 @@ object NetworkInfoProvider {
         // Real Frequency conversion
         val freqGhz = when {
             !isWifi -> "شبكة خلوية"
-            frequency in 2400..2500 -> "${(frequency / 1000.0).toString().take(4)} GHz (2.4G)"
-            frequency in 4900..5900 -> "${(frequency / 1000.0).toString().take(4)} GHz (5G)"
-            frequency in 5925..7125 -> "${(frequency / 1000.0).toString().take(4)} GHz (Wi-Fi 6E)"
+            frequency in 2400..2500 -> String.format(java.util.Locale.US, "%.3f GHz (2.4G)", frequency / 1000.0)
+            frequency in 4900..5900 -> String.format(java.util.Locale.US, "%.3f GHz (5G)", frequency / 1000.0)
+            frequency in 5925..7125 -> String.format(java.util.Locale.US, "%.3f GHz (Wi‑Fi 6E)", frequency / 1000.0)
             frequency > 0 -> "$frequency MHz"
-            else -> "تلقائي"
+            else -> "غير متاح"
         }
 
         // Extract Real IP and Gateway from LinkProperties / DhcpInfo
@@ -108,7 +108,7 @@ object NetworkInfoProvider {
 
         val statusText = when {
             !isConnected -> "لا يوجد اتصال بالإنترنت"
-            isWifi -> "متصل بشبكة واي فاي ($cleanSsid)"
+            isWifi -> "متصل بشبكة Wi‑Fi"
             isCellular -> "متصل ببيانات الهاتف (الشريحة)"
             else -> "متصل بالإنترنت"
         }
@@ -121,11 +121,13 @@ object NetworkInfoProvider {
             isCellular = isCellular,
             signalPercentage = signalPercentage,
             signalDbm = rssi,
-            linkSpeedMbps = linkSpeed.coerceAtLeast(0),
+                            linkSpeedMbps = linkSpeed.coerceAtLeast(0),
+
             frequencyGhz = freqGhz,
             ipAddress = realIp,
             gateway = realGateway,
-            securityType = if (isWifi) "WPA2/WPA3" else "شبكة محمول",
+                            securityType = if (isWifi) "يحدده النظام" else "شبكة محمول",
+
             isMetered = isMetered,
             statusText = statusText
         )

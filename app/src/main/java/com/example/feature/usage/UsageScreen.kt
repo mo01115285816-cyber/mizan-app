@@ -160,7 +160,7 @@ fun UsageScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(horizontal = 16.dp)
-                    .padding(top = 72.dp)
+                    .padding(top = 92.dp)
             ) {
 
             // Fluid Period Switcher

@@ -49,7 +49,7 @@ object PermissionHelper {
     fun checkAllPermissions(context: Context): MizanPermissionsState {
         return MizanPermissionsState(
             hasUsageAccess = hasUsageStatsPermission(context),
-            hasLocationOrWifi = hasLocationPermission(context),
+            hasLocationOrWifi = hasLocationOrWifiPermission(context),
             hasOverlayPermission = hasOverlayPermission(context),
             isVpnPrepared = isVpnPrepared(context),
             isIgnoringBatteryOptimizations = isIgnoringBatteryOptimizations(context),
@@ -108,6 +108,18 @@ object PermissionHelper {
             Manifest.permission.ACCESS_COARSE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
         return fineLocation || coarseLocation
+    }
+
+    fun hasNearbyWifiPermission(context: Context): Boolean {
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.NEARBY_WIFI_DEVICES
+            ) == PackageManager.PERMISSION_GRANTED
+    }
+
+    fun hasLocationOrWifiPermission(context: Context): Boolean {
+        return hasLocationPermission(context) && hasNearbyWifiPermission(context)
     }
 
     fun hasNotificationPermission(context: Context): Boolean {
