@@ -271,16 +271,22 @@ class MainActivity : ComponentActivity() {
                                 onRefreshNetworkDetails = { viewModel.refreshUsage() },
                                 onOpenPermissionsHub = { viewModel.onShowPermissionsHub(true) },
                                 onDismissPermissionsHub = { viewModel.onShowPermissionsHub(false) },
-                                onToggleVpnConsent = { viewModel.setVpnConsentGranted(it) },
-                                onToggleDeviceAdmin = { viewModel.setDeviceAdminEnabled(it) },
+                                onToggleVpnConsent = { enabled ->
+                                    if (enabled) triggerVpnPreparation() else viewModel.setVpnConsentGranted(false)
+                                },
+                                onToggleDeviceAdmin = { enabled ->
+                                    if (enabled) triggerDeviceAdmin() else viewModel.setDeviceAdminEnabled(false)
+                                },
                                 onRequestUsageAccess = { viewModel.openUsageAccessSettings(this@MainActivity) },
                                 onRequestLocationOrWifi = {
-                                    locationPermissionLauncher.launch(
-                                        arrayOf(
-                                            Manifest.permission.ACCESS_FINE_LOCATION,
-                                            Manifest.permission.ACCESS_COARSE_LOCATION
-                                        )
-                                    )
+                                    val permissions = buildList {
+                                        add(Manifest.permission.ACCESS_FINE_LOCATION)
+                                        add(Manifest.permission.ACCESS_COARSE_LOCATION)
+                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                            add(Manifest.permission.NEARBY_WIFI_DEVICES)
+                                        }
+                                    }.toTypedArray()
+                                    locationPermissionLauncher.launch(permissions)
                                 },
                                 onRequestOverlay = { viewModel.openOverlaySettings(this@MainActivity) },
                                 onRequestNotification = {

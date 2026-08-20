@@ -67,6 +67,21 @@ class UsageTrackingService : Service() {
                 context.startService(intent)
             } catch (_: Exception) {}
         }
+
+        fun refreshNow(context: Context) {
+            val intent = Intent(context, UsageTrackingService::class.java).apply {
+                action = ACTION_REFRESH_NOW
+            }
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+            } catch (e: Exception) {
+                Log.w("UsageTrackingService", "Failed to request immediate refresh: ${e.message}")
+            }
+        }
     }
 
     override fun onCreate() {
@@ -87,6 +102,7 @@ class UsageTrackingService : Service() {
                 return START_NOT_STICKY
             }
             ACTION_REFRESH_NOW -> {
+                startForegroundNotification()
                 serviceScope.launch { checkAndSyncUsage() }
             }
             else -> {

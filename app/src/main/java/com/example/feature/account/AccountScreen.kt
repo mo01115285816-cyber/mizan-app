@@ -91,7 +91,6 @@ fun AccountScreen(
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var onlyHomeWifi by remember { mutableStateOf(true) }
     var showSignOutConfirm by remember { mutableStateOf(false) }
 
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
@@ -234,35 +233,6 @@ fun AccountScreen(
                             )
                         }
 
-                        HorizontalDivider(color = MizanColors.Line.copy(alpha = 0.6f))
-
-                        // Only Home Wi-Fi
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "تقييد الحظر على شبكة المنزل فقط",
-                                    style = MizanTypography.BodyMedium,
-                                    color = MizanColors.Charcoal
-                                )
-                                Text(
-                                    text = "السماح ببيانات الجوال بدون تقييد خارج المنزل",
-                                    style = MizanTypography.Caption,
-                                    color = MizanColors.MutedGray
-                                )
-                            }
-                            Switch(
-                                checked = onlyHomeWifi,
-                                onCheckedChange = { onlyHomeWifi = it },
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = MizanColors.Charcoal,
-                                    checkedTrackColor = MizanColors.Lime
-                                )
-                            )
-                        }
                     }
                 }
 

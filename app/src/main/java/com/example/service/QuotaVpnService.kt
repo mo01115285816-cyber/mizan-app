@@ -54,11 +54,8 @@ class QuotaVpnService : VpnService() {
         }
 
         fun stop(context: Context) {
-            val intent = Intent(context, QuotaVpnService::class.java).apply {
-                action = ACTION_STOP_VPN
-            }
             try {
-                context.startService(intent)
+                context.stopService(Intent(context, QuotaVpnService::class.java))
             } catch (_: Exception) {}
         }
 
@@ -106,11 +103,13 @@ class QuotaVpnService : VpnService() {
                 .setBlocking(true)
                 .setMtu(1500)
 
-            // Disallow Mizan app so it can still sync with Supabase
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                try {
-                    builder.addDisallowedApplication(packageName)
-                } catch (_: Exception) {}
+            // Always exclude Mizan itself so it can open the blocked screen,
+            // receive Realtime unblock updates, and stop the VPN on every
+            // supported Android version (minSdk 24).
+            try {
+                builder.addDisallowedApplication(packageName)
+            } catch (e: Exception) {
+                Log.w(tag, "Could not exclude Mizan from VPN: ${e.message}")
             }
 
             vpnInterface = builder.establish()

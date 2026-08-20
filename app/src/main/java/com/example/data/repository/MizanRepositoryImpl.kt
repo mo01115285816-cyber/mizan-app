@@ -15,6 +15,9 @@ import com.example.data.local.DevicePreferencesDataSource
 import com.example.data.remote.SupabaseAuthRepository
 import com.example.data.remote.SupabaseDeviceDataSource
 import com.example.feature.home.DayUsage
+import com.example.service.QuotaOverlayService
+import com.example.service.QuotaVpnService
+import com.example.service.UsageTrackingService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -55,6 +58,11 @@ class MizanRepositoryImpl(
                 preferencesDataSource.updateQuotaLimit(updatedPolicy.monthlyLimitGb)
                 preferencesDataSource.setBlockedStatus(updatedPolicy.isBlocked)
                 preferencesDataSource.setRemoteEnforceVpnBlock(updatedPolicy.enforceVpnBlock)
+                if (!updatedPolicy.isBlocked) {
+                    QuotaVpnService.stop(context)
+                    QuotaOverlayService.hide(context)
+                }
+                UsageTrackingService.refreshNow(context)
             }
         }
         scope.launch {
