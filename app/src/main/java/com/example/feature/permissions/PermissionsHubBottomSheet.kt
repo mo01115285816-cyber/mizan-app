@@ -137,8 +137,8 @@ fun PermissionsHubBottomSheet(
 
                 // 2. Wi-Fi SSID / BSSID Location Permission
                 PermissionCardItem(
-                    title = "التعرف على اسم ومعرف راوتر المنزل (BSSID)",
-                    subtitle = "مطابقة عنوان الماك (MAC Address) لراوتر البيت حتى لا يتم احتساب شبكات خارجية.",
+                    title = "التعرّف على شبكة المنزل (SSID / BSSID)",
+                    subtitle = "امنح Nearby Wi‑Fi والموقع، ثم فعّل خدمة الموقع العامة لقراءة SSID وBSSID الحقيقيين.",
                     icon = Icons.Outlined.Wifi,
                     isGranted = permissionsState.hasLocationOrWifi,
                     onAction = onRequestLocationOrWifi,

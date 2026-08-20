@@ -119,7 +119,22 @@ object PermissionHelper {
     }
 
     fun hasLocationOrWifiPermission(context: Context): Boolean {
-        return hasLocationPermission(context) && hasNearbyWifiPermission(context)
+        return hasLocationPermission(context) &&
+            hasNearbyWifiPermission(context) &&
+            isLocationServicesEnabled(context)
+    }
+
+    fun missingLocationOrWifiPermissions(context: Context): Array<String> {
+        val missing = buildList {
+            if (!hasLocationPermission(context)) {
+                add(Manifest.permission.ACCESS_FINE_LOCATION)
+                add(Manifest.permission.ACCESS_COARSE_LOCATION)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !hasNearbyWifiPermission(context)) {
+                add(Manifest.permission.NEARBY_WIFI_DEVICES)
+            }
+        }
+        return missing.distinct().toTypedArray()
     }
 
     fun isLocationServicesEnabled(context: Context): Boolean {

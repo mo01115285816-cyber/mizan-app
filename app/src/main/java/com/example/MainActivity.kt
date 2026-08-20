@@ -74,15 +74,28 @@ class MainActivity : ComponentActivity() {
                 // 2. Wi-Fi / Location Runtime Permission Launcher
                 val locationPermissionLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.RequestMultiplePermissions(),
-                    onResult = { _ ->
+                    onResult = { result ->
                         viewModel.refreshUsage()
-                        if (PermissionHelper.hasLocationOrWifiPermission(this@MainActivity) &&
+                        val stillMissing = PermissionHelper.missingLocationOrWifiPermissions(this@MainActivity)
+                        if (result.values.any { !it } && stillMissing.isNotEmpty()) {
+                            try {
+                                startActivity(
+                                    Intent(
+                                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                        Uri.parse("package:${packageName}")
+                                    )
+                                )
+                            } catch (_: Exception) { }
+                        }
+                        if (PermissionHelper.hasLocationPermission(this@MainActivity) &&
+                            PermissionHelper.hasNearbyWifiPermission(this@MainActivity) &&
                             !PermissionHelper.isLocationServicesEnabled(this@MainActivity)
                         ) {
                             try {
                                 startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
                             } catch (_: Exception) { }
                         }
+                        viewModel.checkPermissions()
                     }
                 )
 
@@ -106,16 +119,8 @@ class MainActivity : ComponentActivity() {
 
                 // Initial launch checks
                 LaunchedEffect(Unit) {
-                    if (!PermissionHelper.hasLocationOrWifiPermission(this@MainActivity)) {
-                        val permissions = buildList {
-                            add(Manifest.permission.ACCESS_FINE_LOCATION)
-                            add(Manifest.permission.ACCESS_COARSE_LOCATION)
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                                add(Manifest.permission.NEARBY_WIFI_DEVICES)
-                            }
-                        }.toTypedArray()
-                        locationPermissionLauncher.launch(permissions)
-                    }
+                    // Network/BSSID permission is requested from the visible card only.
+                    // This avoids racing the notification permission launcher on first start.
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
                         !PermissionHelper.hasNotificationPermission(this@MainActivity)
                     ) {
@@ -279,14 +284,14 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onRequestUsageAccess = { viewModel.openUsageAccessSettings(this@MainActivity) },
                                 onRequestLocationOrWifi = {
-                                    val permissions = buildList {
-                                        add(Manifest.permission.ACCESS_FINE_LOCATION)
-                                        add(Manifest.permission.ACCESS_COARSE_LOCATION)
-                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                                            add(Manifest.permission.NEARBY_WIFI_DEVICES)
-                                        }
-                                    }.toTypedArray()
-                                    locationPermissionLauncher.launch(permissions)
+                                    val missingNetworkPermissions = PermissionHelper.missingLocationOrWifiPermissions(this@MainActivity)
+                                    if (missingNetworkPermissions.isNotEmpty()) {
+                                        locationPermissionLauncher.launch(missingNetworkPermissions)
+                                    } else {
+                                        try {
+                                            startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+                                        } catch (_: Exception) { }
+                                    }
                                 },
                                 onRequestOverlay = { viewModel.openOverlaySettings(this@MainActivity) },
                                 onRequestNotification = {
