@@ -223,6 +223,8 @@ class UsageTrackingService : Service() {
             "متصل بشبكة المنزل (${networkDetails.ssid}) • الاستهلاك: ${consumedGb} جيجابايت"
         } else if (networkDetails.isCellular) {
             "متصل ببيانات الشريحة (Mobile Data) • المتابعة معلقة"
+        } else if (networkDetails.isWifi && networkDetails.ssid.startsWith("غير متاح")) {
+            "متصل بـWi‑Fi لكن تعذر التحقق من هوية الشبكة • فعّل الموقع الدقيق"
         } else {
             "خارج شبكة المنزل (${networkDetails.ssid}) • المتابعة معلقة مؤقتاً"
         }

@@ -59,11 +59,27 @@ object NetworkInfoProvider {
         var securityType = ""
 
         if (wifiManager != null && isWifi) {
-            val wifiInfo: WifiInfo? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && capabilities != null) {
-                capabilities.transportInfo as? WifiInfo ?: wifiManager.connectionInfo
+            val transportWifiInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && capabilities != null) {
+                capabilities.transportInfo as? WifiInfo
             } else {
-                wifiManager.connectionInfo
+                null
             }
+            val managerWifiInfo = runCatching { wifiManager.connectionInfo }.getOrNull()
+            // Some Android/OEM builds expose a redacted WifiInfo through
+            // NetworkCapabilities while WifiManager.connectionInfo is usable.
+            // Prefer the first candidate with a real SSID or BSSID, then fall
+            // back to either candidate so the UI can report the exact redaction.
+            val wifiInfo = listOfNotNull(transportWifiInfo, managerWifiInfo)
+                .firstOrNull { info ->
+                    val ssid = info.ssid?.trim()?.removeSurrounding("\"") ?: ""
+                    val bssid = info.bssid?.trim().orEmpty()
+                    ssid.isNotBlank() &&
+                        !ssid.equals(WifiManager.UNKNOWN_SSID, ignoreCase = true) &&
+                        !ssid.equals("<unknown ssid>", ignoreCase = true) &&
+                        !bssid.equals("02:00:00:00:00:00", ignoreCase = true)
+                }
+                ?: transportWifiInfo
+                ?: managerWifiInfo
 
             if (wifiInfo != null) {
                 rawSsid = wifiInfo.ssid ?: ""

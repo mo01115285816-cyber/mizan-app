@@ -27,7 +27,7 @@ data class MizanPermissionsState(
     val hasBootPermission: Boolean = true
 ) {
     val allEssentialGranted: Boolean
-        get() = hasUsageAccess && hasLocationOrWifi
+        get() = hasUsageAccess && hasLocationOrWifi && isVpnPrepared
 
     val grantedCount: Int
         get() = listOf(
@@ -98,16 +98,15 @@ object PermissionHelper {
         return mode == AppOpsManager.MODE_ALLOWED
     }
 
+    /**
+     * SSID/BSSID are location-sensitive WifiInfo fields. Approximate/coarse
+     * location is intentionally not treated as sufficient for this feature.
+     */
     fun hasLocationPermission(context: Context): Boolean {
-        val fineLocation = ContextCompat.checkSelfPermission(
+        return ContextCompat.checkSelfPermission(
             context,
             Manifest.permission.ACCESS_FINE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
-        val coarseLocation = ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.ACCESS_COARSE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-        return fineLocation || coarseLocation
     }
 
     fun hasNearbyWifiPermission(context: Context): Boolean {
@@ -128,7 +127,9 @@ object PermissionHelper {
         val missing = buildList {
             if (!hasLocationPermission(context)) {
                 add(Manifest.permission.ACCESS_FINE_LOCATION)
-                add(Manifest.permission.ACCESS_COARSE_LOCATION)
+                if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                    add(Manifest.permission.ACCESS_COARSE_LOCATION)
+                }
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !hasNearbyWifiPermission(context)) {
                 add(Manifest.permission.NEARBY_WIFI_DEVICES)
@@ -157,7 +158,7 @@ object PermissionHelper {
         val state = checkAllPermissions(context)
         val location = if (isLocationServicesEnabled(context)) "LOCATION_ON" else "LOCATION_OFF"
         val wifi = if (hasNearbyWifiPermission(context)) "NEARBY_WIFI_GRANTED" else "NEARBY_WIFI_MISSING"
-        val fine = if (hasLocationPermission(context)) "LOCATION_GRANTED" else "LOCATION_MISSING"
+        val fine = if (hasLocationPermission(context)) "PRECISE_LOCATION_GRANTED" else "PRECISE_LOCATION_MISSING"
         val usage = if (state.hasUsageAccess) "USAGE_GRANTED" else "USAGE_MISSING"
         val vpn = if (state.isVpnPrepared) "VPN_PREPARED" else "VPN_NOT_PREPARED"
         val battery = if (state.isIgnoringBatteryOptimizations) "BATTERY_EXEMPT" else "BATTERY_OPTIMIZED"

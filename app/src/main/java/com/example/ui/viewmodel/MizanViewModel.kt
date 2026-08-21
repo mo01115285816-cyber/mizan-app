@@ -108,6 +108,11 @@ class MizanViewModel(
                             isDeviceAdminActive = profile.isDeviceAdminActive
                         )
                     }
+                    if (profile.isActive) {
+                        // Keep the monitor alive after process recreation so a
+                        // dashboard policy change can be received and enforced.
+                        UsageTrackingService.start(context)
+                    }
                     checkPermissionsAndEnforcement(profile)
                 }
             }
@@ -273,7 +278,7 @@ class MizanViewModel(
                         networkSsid = networkDetails.ssid,
                         connectionStatus = when {
                             !networkDetails.isConnected -> "غير متصل بالإنترنت"
-                            networkDetails.isWifi && networkDetails.ssid.startsWith("غير متاح") -> "متصل بشبكة Wi‑Fi — الاسم غير متاح"
+                            networkDetails.isWifi && networkDetails.ssid.startsWith("غير متاح") -> "متصل بـWi‑Fi — تعذر التحقق من اسم الشبكة"
                             networkDetails.isWifi -> "متصل: ${networkDetails.ssid}"
                             networkDetails.isCellular -> "متصل ببيانات الهاتف"
                             else -> "متصل بالإنترنت"
@@ -414,8 +419,11 @@ class MizanViewModel(
     }
 
     fun checkPermissionsAndEnforcement(profile: DeviceProfile) {
-        if (profile.isBlocked) {
-            _appState.value = AppState.QuotaExhausted("تم إيقاف الاتصال من قبل مسؤول الشبكة")
+        // AppState is decided by observeUsageData after matching the current
+        // network against Target Wi-Fi. Never show a global blocked screen
+        // merely because the cached policy is blocked on another network.
+        if (profile.isActive) {
+            UsageTrackingService.start(context)
         }
     }
 
