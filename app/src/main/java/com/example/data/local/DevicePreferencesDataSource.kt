@@ -34,6 +34,7 @@ class DevicePreferencesDataSource(private val context: Context) {
         val KEY_HOME_SSID = stringPreferencesKey("home_ssid")
         val KEY_TARGET_SSID = stringPreferencesKey("target_ssid")
         val KEY_TARGET_BSSID = stringPreferencesKey("target_bssid")
+        val KEY_TARGET_NETWORK_ID = stringPreferencesKey("target_network_id")
         val KEY_HOME_BSSID = stringPreferencesKey("home_bssid")
         val KEY_QUOTA_LIMIT_GB = floatPreferencesKey("quota_limit_gb")
         val KEY_CURRENT_USAGE_GB = floatPreferencesKey("current_usage_gb")
@@ -142,6 +143,10 @@ class DevicePreferencesDataSource(private val context: Context) {
         preferences[KEY_TARGET_BSSID] ?: ""
     }
 
+    val targetNetworkIdFlow: Flow<String> = context.dataStore.data.map { preferences ->
+        preferences[KEY_TARGET_NETWORK_ID] ?: ""
+    }
+
     val blockedScopeFlow: Flow<String> = context.dataStore.data.map { preferences ->
         preferences[KEY_BLOCKED_SCOPE] ?: "TARGET_WIFI_ONLY"
     }
@@ -243,6 +248,12 @@ class DevicePreferencesDataSource(private val context: Context) {
     suspend fun setTargetBssid(bssid: String) {
         context.dataStore.edit { preferences ->
             preferences[KEY_TARGET_BSSID] = bssid.trim()
+        }
+    }
+
+    suspend fun setTargetNetworkId(networkId: String) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_TARGET_NETWORK_ID] = networkId.trim()
         }
     }
 

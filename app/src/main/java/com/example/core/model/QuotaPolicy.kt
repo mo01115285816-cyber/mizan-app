@@ -9,6 +9,7 @@ data class QuotaPolicy(
     val warningThresholdPercent: Int = 85,
     val homeSsid: String = "Mizan-Home-5G",
     val targetBssid: String = "",
+    val targetNetworkId: String = "",
     val enforceVpnBlock: Boolean = false,
     val isBlocked: Boolean = false,
     val blockedScope: String = "TARGET_WIFI_ONLY",

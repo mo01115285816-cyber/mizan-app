@@ -67,10 +67,13 @@ class MizanRepositoryImpl(
         }
         scope.launch {
             supabaseDataSource.realtimeTargetNetworkUpdates.collect { targetNetwork ->
-                preferencesDataSource.setTargetSsid(targetNetwork.ssid)
-                preferencesDataSource.setTargetBssid(targetNetwork.bssid)
-                if (targetNetwork.bssid.isNotBlank()) preferencesDataSource.setHomeBssid("")
-                UsageTrackingService.refreshNow(context)
+                // Legacy household-wide fallback only. Assigned device policies win.
+                if (preferencesDataSource.targetNetworkIdFlow.first().isBlank()) {
+                    preferencesDataSource.setTargetSsid(targetNetwork.ssid)
+                    preferencesDataSource.setTargetBssid(targetNetwork.bssid)
+                    if (targetNetwork.bssid.isNotBlank()) preferencesDataSource.setHomeBssid("")
+                    UsageTrackingService.refreshNow(context)
+                }
             }
         }
     }
@@ -95,12 +98,6 @@ class MizanRepositoryImpl(
             }
         }
 
-        val targetNetwork = supabaseDataSource.fetchTargetNetwork(profile.householdId)
-        if (targetNetwork != null) {
-            preferencesDataSource.setTargetSsid(targetNetwork.ssid)
-            preferencesDataSource.setTargetBssid(targetNetwork.bssid)
-        }
-
         // Fairness baseline: capture only Wi-Fi counters at the exact moment
         // the device is linked. Pre-activation traffic never enters Mizan quota.
         val now = System.currentTimeMillis()
@@ -122,8 +119,12 @@ class MizanRepositoryImpl(
             val remotePolicy = supabaseDataSource.fetchQuotaPolicy(profile.deviceKey)
             if (remotePolicy != null) {
                 applyRemotePolicy(remotePolicy)
-                if (remotePolicy.targetBssid.isNotBlank()) preferencesDataSource.setTargetBssid(remotePolicy.targetBssid)
-                if (remotePolicy.homeSsid.isNotBlank()) preferencesDataSource.setTargetSsid(remotePolicy.homeSsid)
+            } else {
+                val targetNetwork = supabaseDataSource.fetchTargetNetwork(profile.householdId)
+                if (targetNetwork != null) {
+                    preferencesDataSource.setTargetSsid(targetNetwork.ssid)
+                    preferencesDataSource.setTargetBssid(targetNetwork.bssid)
+                }
             }
         }
 
@@ -141,13 +142,12 @@ class MizanRepositoryImpl(
         val quotaPolicy = supabaseDataSource.fetchQuotaPolicy(profile.deviceKey)
         if (quotaPolicy != null) {
             applyRemotePolicy(quotaPolicy)
-            if (quotaPolicy.targetBssid.isNotBlank()) preferencesDataSource.setTargetBssid(quotaPolicy.targetBssid)
-            if (quotaPolicy.homeSsid.isNotBlank()) preferencesDataSource.setTargetSsid(quotaPolicy.homeSsid)
-        }
-        val targetNetwork = supabaseDataSource.fetchTargetNetwork(profile.householdId)
-        if (targetNetwork != null) {
-            preferencesDataSource.setTargetSsid(targetNetwork.ssid)
-            preferencesDataSource.setTargetBssid(targetNetwork.bssid)
+        } else {
+            val targetNetwork = supabaseDataSource.fetchTargetNetwork(profile.householdId)
+            if (targetNetwork != null) {
+                preferencesDataSource.setTargetSsid(targetNetwork.ssid)
+                preferencesDataSource.setTargetBssid(targetNetwork.bssid)
+            }
         }
         val networkDetails = NetworkInfoProvider.getConnectedNetworkDetails(context)
         preferencesDataSource.setNetworkState(NetworkInfoProvider.classifyNetworkState(networkDetails))
@@ -166,6 +166,13 @@ class MizanRepositoryImpl(
         preferencesDataSource.setBlockedStatus(policy.isBlocked)
         preferencesDataSource.setRemoteEnforceVpnBlock(policy.enforceVpnBlock)
         preferencesDataSource.setBlockedScope(policy.blockedScope)
+        preferencesDataSource.setTargetNetworkId(policy.targetNetworkId)
+        if (policy.homeSsid.isNotBlank()) preferencesDataSource.setTargetSsid(policy.homeSsid)
+        if (policy.targetBssid.isNotBlank()) preferencesDataSource.setTargetBssid(policy.targetBssid)
+        if (policy.targetNetworkId.isBlank() && policy.homeSsid.isBlank() && policy.targetBssid.isBlank()) {
+            preferencesDataSource.setTargetSsid("")
+            preferencesDataSource.setTargetBssid("")
+        }
         preferencesDataSource.setPolicyVersion(policy.policyVersion, policy.policyUpdatedAt)
         preferencesDataSource.recordPolicySync()
         return true
